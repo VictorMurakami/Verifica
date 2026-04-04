@@ -13,7 +13,7 @@ export default function Footer() {
           <span>Projeto sem fins lucrativos de utilidade pública</span>
           <div className="flex items-center gap-3">
             <a
-              href="https://github.com/seu-usuario/verifato"
+              href="https://github.com/VictorMurakami/VeriFato"
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-ghost btn-xs gap-1.5 rounded-full hover:text-base-content/70"
@@ -55,7 +55,7 @@ export default function Footer() {
               </div>
               <div className="w-full space-y-2">
                 <a
-                  href="https://www.buymeacoffee.com/verifato"
+                  href="https://buymeacoffee.com/victorsmur9"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn btn-primary btn-block rounded-full gap-2"
@@ -66,7 +66,7 @@ export default function Footer() {
                 </a>
                 <div className="divider text-xs text-base-content/30 my-1">ou via PIX</div>
                 <div className="bg-base-200 rounded-xl p-3 text-sm font-mono text-center select-all cursor-pointer hover:bg-base-300 transition-colors">
-                  verifato@email.com
+                  49c438ac-1f04-43cd-83f5-62c717b81bf5
                 </div>
                 <p className="text-[10px] text-base-content/30 pt-1">
                   Clique na chave para copiar
