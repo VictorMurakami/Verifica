@@ -1,0 +1,68 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: light, dark, night, dim;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Theme transition */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Animations */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Gradient text */
+.text-gradient {
+  background: linear-gradient(135deg, oklch(0.65 0.2 250), oklch(0.7 0.2 290));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Mouse glow layer */
+.mouse-glow {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+
+/* Textarea glow on focus */
+textarea:focus {
+  box-shadow: 0 0 0 3px oklch(0.7 0.15 250 / 0.15);
+}
+
+/* 8-bit retro font active in Pac-Man mode */
+html.pacman-mode,
+html.pacman-mode body,
+html.pacman-mode * {
+  font-family: var(--font-retro), monospace !important;
+}
+
+html.pacman-mode {
+  font-size: 12px;
+}
+
