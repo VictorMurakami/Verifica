@@ -7,6 +7,7 @@ import { Play } from "lucide-react";
 import ThemeToggle, { ThemeId } from "@/components/ThemeToggle";
 import MouseGlow from "@/components/MouseGlow";
 import Footer from "@/components/Footer";
+import ThemeLogo from "@/components/ThemeLogo";
 import { DebugProvider } from "@/context/DebugContext";
 import "./globals.css";
 
@@ -37,7 +38,7 @@ export default function RootLayout({
 
   // Read persisted dot preference after hydration
   useEffect(() => {
-    const saved = localStorage.getItem("verifato-dots");
+    const saved = localStorage.getItem("verifica-dots");
     if (saved === "false") setShowDots(false);
   }, []);
 
@@ -55,7 +56,7 @@ export default function RootLayout({
   const toggleDots = useCallback(() => {
     setShowDots((prev) => {
       const next = !prev;
-      localStorage.setItem("verifato-dots", String(next));
+      localStorage.setItem("verifica-dots", String(next));
       return next;
     });
   }, []);
@@ -78,13 +79,13 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} h-full antialiased`}
     >
       <head>
-        <title>VeriFato - Detector Inteligente de Fake News</title>
+        <title>Verifica - Detector Inteligente de Fake News</title>
         <meta name="description" content="Verifique a confiabilidade de textos e notícias com inteligência artificial." />
         <Script
           id="theme-initializer"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('verifato-theme')||'auto';var d=t;if(t==='auto')d=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';if(t==='pacman')d='night';document.documentElement.setAttribute('data-theme',d)}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('verifica-theme')||'auto';var d=t;if(t==='auto')d=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';if(t==='pacman')d='night';document.documentElement.setAttribute('data-theme',d)}catch(e){}})()`,
           }}
         />
       </head>
@@ -93,9 +94,15 @@ export default function RootLayout({
           <MouseGlow pacmanMode={pacmanMode} enabled={showDots} isPlaying={isGamePlaying} onGameOver={handleGameOver} />
           <header className={`navbar px-4 sm:px-6 relative z-10 ${pacmanMode ? "bg-base-200" : ""}`}>
             <div className="flex-1 flex items-center gap-3">
-              <span className="text-base sm:text-lg font-bold tracking-tight">
-                Veri<span className="text-gradient">Fato</span>
-              </span>
+              <div className="w-28 flex items-center max-w-[40px] cursor-pointer" onClick={() => {
+                if (window.location.pathname === "/") {
+                  window.dispatchEvent(new CustomEvent("verifica:new-analysis"));
+                } else {
+                  window.location.href = "/";
+                }
+              }}>
+                <ThemeLogo type="logo" />
+              </div>
               {pacmanMode && showDots && !isGamePlaying && (
                 <button
                   onClick={() => setIsGamePlaying(true)}

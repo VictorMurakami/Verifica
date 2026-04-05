@@ -39,7 +39,7 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number,
   return { lines, height: lines.length * lineHeight };
 }
 
-function renderCard(result: AnalysisResult): string {
+async function renderCard(result: AnalysisResult): Promise<string> {
   const S = 2; // scale factor for crisp output
   const W = 800 * S;
   const PAD = 56 * S;
@@ -56,9 +56,23 @@ function renderCard(result: AnalysisResult): string {
   ctx.font = `400 ${20 * S}px ${font}`;
   const verdict = wrapText(ctx, result.overallVerdict, contentW - 40 * S, 30 * S);
 
+  // Load image
+  const loadImage = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  };
+
+  const logoImg = await loadImage("/logos/share/Logotipo1_Dark.png");
+  const logoH = 28 * S;
+  const logoW = (logoImg.width / logoImg.height) * logoH;
+
   // Calculate total height
   let totalH = PAD;
-  totalH += 36 * S + 40 * S;    // logo + gap
+  totalH += Math.max(36 * S, logoH) + 40 * S;    // logo + gap
   totalH += 90 * S;              // score number
   totalH += 30 * S + 40 * S;    // score label + gap
   totalH += verdict.height + 36 * S + 32 * S; // verdict box + padding + gap
@@ -78,16 +92,15 @@ function renderCard(result: AnalysisResult): string {
   let y = PAD;
 
   // Logo
-  ctx.font = `800 ${32 * S}px ${font}`;
-  ctx.fillStyle = "#ffffff";
-  ctx.textAlign = "left";
-  ctx.fillText("VeriFato", PAD, y + 28 * S);
+  ctx.drawImage(logoImg, PAD, y, logoW, logoH);
+  
   ctx.font = `400 ${16 * S}px ${font}`;
   ctx.fillStyle = "rgba(166,173,186,0.4)";
-  const urlText = "verifato.com.br";
+  const urlText = "ai-verifica.vercel.app";
   const urlW = ctx.measureText(urlText).width;
-  ctx.fillText(urlText, W - PAD - urlW, y + 28 * S);
-  y += 36 * S + 40 * S;
+  ctx.fillText(urlText, W - PAD - urlW, y + 22 * S);
+  
+  y += Math.max(36 * S, logoH) + 40 * S;
 
   // Score number
   ctx.textAlign = "center";
@@ -170,24 +183,31 @@ export default function ShareCard({ result }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
-  const openModal = useCallback(() => {
-    const url = renderCard(result);
-    setPreviewUrl(url);
+  const openModal = useCallback(async () => {
     setOpen(true);
+    setGenerating(true);
+    try {
+      const url = await renderCard(result);
+      setPreviewUrl(url);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setGenerating(false);
+    }
   }, [result]);
 
   async function handleDownload() {
     setGenerating(true);
     try {
-      const dataUrl = previewUrl || renderCard(result);
+      const dataUrl = previewUrl || await renderCard(result);
 
       if (navigator.share && navigator.canShare) {
         const res = await fetch(dataUrl);
         const blob = await res.blob();
-        const file = new File([blob], "verifato-analise.png", { type: "image/png" });
+        const file = new File([blob], "verifica-analise.png", { type: "image/png" });
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({
-            title: "VeriFato - Análise",
+            title: "Verifica - Análise",
             text: `Pontuação: ${result.reliabilityScore}/10`,
             files: [file],
           });
@@ -197,7 +217,7 @@ export default function ShareCard({ result }: Props) {
       }
 
       const link = document.createElement("a");
-      link.download = "verifato-analise.png";
+      link.download = "verifica-analise.png";
       link.href = dataUrl;
       link.click();
     } finally {

@@ -13,7 +13,7 @@ export default function Footer() {
           <span>Projeto sem fins lucrativos de utilidade pública</span>
           <div className="flex items-center gap-3">
             <a
-              href="https://github.com/VictorMurakami/VeriFato"
+              href="https://github.com/VictorMurakami/Verifica"
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-ghost btn-xs gap-1.5 rounded-full hover:text-base-content/70"
@@ -47,7 +47,7 @@ export default function Footer() {
                 <Coffee size={28} className="text-primary" />
               </div>
               <div>
-                <h3 className="font-bold text-lg">Apoie o VeriFato</h3>
+                <h3 className="font-bold text-lg">Apoie o Verifica</h3>
                 <p className="text-sm text-base-content/60 mt-1">
                   Este projeto é gratuito e de código aberto. Se ele te ajudou, considere apoiar para
                   manter o serviço no ar.

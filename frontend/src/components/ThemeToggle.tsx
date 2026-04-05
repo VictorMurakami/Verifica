@@ -39,7 +39,7 @@ export default function ThemeToggle({ onThemeChange }: Props) {
     : [...baseThemes];
 
   useEffect(() => {
-    const saved = (localStorage.getItem("verifato-theme") || "auto") as ThemeId;
+    const saved = (localStorage.getItem("verifica-theme") || "auto") as ThemeId;
     // If pacman was saved but debug is off, fall back to dark
     const effective = saved === "pacman" && !debugMode ? "dark" : saved;
     setActive(effective);
@@ -48,7 +48,7 @@ export default function ThemeToggle({ onThemeChange }: Props) {
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
-      const current = (localStorage.getItem("verifato-theme") || "auto") as ThemeId;
+      const current = (localStorage.getItem("verifica-theme") || "auto") as ThemeId;
       if (current === "auto") {
         document.documentElement.setAttribute("data-theme", getSystemTheme());
       }
@@ -70,7 +70,7 @@ export default function ThemeToggle({ onThemeChange }: Props) {
 
   function select(id: ThemeId) {
     setActive(id);
-    localStorage.setItem("verifato-theme", id);
+    localStorage.setItem("verifica-theme", id);
     document.documentElement.setAttribute("data-theme", resolveDataTheme(id));
     onThemeChange?.(id);
   }

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Shield, Zap, Lock, Sliders } from "lucide-react";
 import { useDebug } from "@/context/DebugContext";
+import ThemeLogo from "@/components/ThemeLogo";
 import AnalysisForm from "@/components/AnalysisForm";
 import AnalysisResultView from "@/components/AnalysisResultView";
 import { AnalysisRequest, AnalysisResult } from "@/types/analysis";
@@ -41,6 +42,11 @@ export default function Home() {
     setResult(null);
     setError(null);
   }
+
+  useEffect(() => {
+    window.addEventListener("verifica:new-analysis", handleNewAnalysis);
+    return () => window.removeEventListener("verifica:new-analysis", handleNewAnalysis);
+  }, []);
 
   return (
     <main className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:py-12">
@@ -95,9 +101,9 @@ export default function Home() {
             className="w-full max-w-2xl text-center space-y-6 sm:space-y-8"
           >
             <div className="space-y-2">
-              <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tighter">
-                Veri<span className="text-gradient">Fato</span>
-              </h1>
+              <div className="flex justify-center mx-auto mb-2">
+                <ThemeLogo type="logotipo" width={300} />
+              </div>
               <p className="text-base-content/50 text-base sm:text-lg font-light">
                 Detector Inteligente de Fake News
               </p>
