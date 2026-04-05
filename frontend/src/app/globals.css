@@ -13,6 +13,10 @@ html {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+body {
+  overflow-x: hidden;
+}
+
 /* Animations */
 @keyframes fade-in-up {
   from { opacity: 0; transform: translateY(16px); }

@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { Geist, Geist_Mono, Press_Start_2P } from "next/font/google";
 import Script from "next/script";
+import { Play } from "lucide-react";
 import ThemeToggle, { ThemeId } from "@/components/ThemeToggle";
 import MouseGlow from "@/components/MouseGlow";
 import Footer from "@/components/Footer";
@@ -31,14 +32,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const [pacmanMode, setPacmanMode] = useState(false);
-  const [showDots, setShowDots] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return localStorage.getItem("verifato-dots") !== "false";
-  });
+  const [showDots, setShowDots] = useState(true);
+  const [isGamePlaying, setIsGamePlaying] = useState(false);
+
+  // Read persisted dot preference after hydration
+  useEffect(() => {
+    const saved = localStorage.getItem("verifato-dots");
+    if (saved === "false") setShowDots(false);
+  }, []);
 
   const handleThemeChange = useCallback((id: ThemeId) => {
     setPacmanMode(id === "pacman");
   }, []);
+
+  const handleGameOver = useCallback(() => setIsGamePlaying(false), []);
+
+  // Stop the game if pac-man mode or dots get disabled
+  useEffect(() => {
+    if (!pacmanMode || !showDots) setIsGamePlaying(false);
+  }, [pacmanMode, showDots]);
 
   const toggleDots = useCallback(() => {
     setShowDots((prev) => {
@@ -78,12 +90,21 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <DebugProvider>
-          <MouseGlow pacmanMode={pacmanMode} enabled={showDots} />
+          <MouseGlow pacmanMode={pacmanMode} enabled={showDots} isPlaying={isGamePlaying} onGameOver={handleGameOver} />
           <header className={`navbar px-4 sm:px-6 relative z-10 ${pacmanMode ? "bg-base-200" : ""}`}>
-            <div className="flex-1">
+            <div className="flex-1 flex items-center gap-3">
               <span className="text-base sm:text-lg font-bold tracking-tight">
                 Veri<span className="text-gradient">Fato</span>
               </span>
+              {pacmanMode && showDots && !isGamePlaying && (
+                <button
+                  onClick={() => setIsGamePlaying(true)}
+                  className="btn btn-xs bg-yellow-400 hover:bg-yellow-300 text-black border border-yellow-500 shadow shadow-yellow-400/30 rounded-full gap-1.5"
+                >
+                  <Play size={12} fill="black" />
+                  PLAY
+                </button>
+              )}
             </div>
             <div className="flex-none flex items-center gap-2">
               <div className="tooltip tooltip-bottom" data-tip={showDots ? "Ocultar pontos" : "Mostrar pontos"}>
