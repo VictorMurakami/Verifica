@@ -41,8 +41,26 @@ function spriteSlotKind(row: number, col: number): "pacman" | "bigdot" | "ghost"
 }
 
 function ghostSrcForCell(row: number, col: number): string {
-  const ci = ((row * 3 + col * 7 + 13) & 0x7fffffff) % GHOST_SRCS.length;
-  return GHOST_SRCS[ci];
+  // Use a second independent hash so the colour isn't correlated with spriteSlotKind
+  let h = (row * 48271) ^ (col * 40692037);
+  h = ((h >> 16) ^ h) * 0x119de1f3;
+  h = (h >> 16) ^ h;
+  return GHOST_SRCS[(h >>> 0) % GHOST_SRCS.length];
+}
+
+/** Return the single pac-man spawn for the current grid.
+ *  Tries the first natural "pacman" sprite-slot (row>=1, col>=1 so it's visible),
+ *  otherwise falls back to the first visible sprite-slot. */
+function findPacmanSpawn(rows: number, cols: number): { row: number; col: number } {
+  for (let r = 1; r < rows; r++)
+    for (let c = 1; c < cols; c++)
+      if (isSpriteSlot(r, c) && spriteSlotKind(r, c) === "pacman")
+        return { row: r, col: c };
+  // No natural pacman — pick the first visible sprite-slot
+  for (let r = 1; r < rows; r++)
+    for (let c = 1; c < cols; c++)
+      if (isSpriteSlot(r, c)) return { row: r, col: c };
+  return { row: 3, col: 4 };
 }
 
 const GHOST_SRCS = [
@@ -129,49 +147,34 @@ export default function MouseGlow({
       const cols = Math.ceil(window.innerWidth / DOT_GAP) + 1;
       const rows = Math.ceil(window.innerHeight / DOT_GAP) + 1;
 
+      const spawn = findPacmanSpawn(rows, cols);
       const gridInfo = new Map<string, { type: "ghost" | "bigdot"; ghostSrc?: string }>();
-
-      // Find the idle pac-man position so the game mc spawns there
-      let startRow = -1;
-      let startCol = -1;
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           if (!isSpriteSlot(r, c)) continue;
+          if (r === spawn.row && c === spawn.col) continue; // player spawn — regular dot
           const kind = spriteSlotKind(r, c);
-
-          if (kind === "pacman") {
-            // First idle pac-man becomes the start position
-            if (startRow === -1) {
-              startRow = r;
-              startCol = c;
-            }
-            // In game mode pac-man slots are treated as regular dots (eaten at start if it's the spawn)
-          } else if (kind === "bigdot") {
+          if (kind === "bigdot") {
             gridInfo.set(`${r}-${c}`, { type: "bigdot" });
           } else {
+            // "ghost" and "pacman" slots both become ghosts in game
             gridInfo.set(`${r}-${c}`, { type: "ghost", ghostSrc: ghostSrcForCell(r, c) });
           }
         }
       }
 
-      // Fallback if no idle pac-man exists in this grid
-      if (startRow === -1) {
-        startRow = 1;
-        startCol = 1;
-      }
-
       gameRef.current = {
-        pacRow: startRow,
-        pacCol: startCol,
-        prevRow: startRow,
-        prevCol: startCol,
+        pacRow: spawn.row,
+        pacCol: spawn.col,
+        prevRow: spawn.row,
+        prevCol: spawn.col,
         dirR: 0,
         dirC: 1,
         nextDirR: 0,
         nextDirC: 1,
         lastMoveTime: performance.now(),
-        eatenCells: new Set([`${startRow}-${startCol}`]),
+        eatenCells: new Set([`${spawn.row}-${spawn.col}`]),
         vulnerableUntil: 0,
         gridInfo,
         totalCols: cols,
@@ -470,6 +473,7 @@ export default function MouseGlow({
       } else if (isPac) {
         const cols = Math.ceil(w / DOT_GAP) + 1;
         const rows = Math.ceil(h / DOT_GAP) + 1;
+        const pacSpawn = findPacmanSpawn(rows, cols);
 
         for (let row = 0; row < rows; row++) {
           for (let col = 0; col < cols; col++) {
@@ -492,26 +496,29 @@ export default function MouseGlow({
             }
 
             if (isSpriteSlot(row, col)) {
-              const kind = spriteSlotKind(row, col);
-
-              if (kind === "pacman") {
+              // Exactly one pac-man at the spawn position
+              if (row === pacSpawn.row && col === pacSpawn.col) {
                 const key = `p-${row}-${col}`;
                 activeKeys.add(key);
                 const el = getOrCreateSprite(key, PACMAN_SRC);
                 el.style.transform = `translate(${x - SPRITE_SIZE / 2}px,${y - SPRITE_SIZE / 2}px)`;
                 el.style.display = "";
-              } else if (kind === "bigdot") {
-                const key = `bd-${row}-${col}`;
-                activeKeys.add(key);
-                const el = getOrCreateSprite(key, BIG_DOT_SRC, BIG_DOT_SPRITE_SIZE);
-                el.style.transform = `translate(${x - BIG_DOT_SPRITE_SIZE / 2}px,${y - BIG_DOT_SPRITE_SIZE / 2}px)`;
-                el.style.display = "";
               } else {
-                const key = `g-${row}-${col}`;
-                activeKeys.add(key);
-                const el = getOrCreateSprite(key, ghostSrcForCell(row, col));
-                el.style.transform = `translate(${x - SPRITE_SIZE / 2}px,${y - SPRITE_SIZE / 2}px)`;
-                el.style.display = "";
+                const kind = spriteSlotKind(row, col);
+                if (kind === "bigdot") {
+                  const key = `bd-${row}-${col}`;
+                  activeKeys.add(key);
+                  const el = getOrCreateSprite(key, BIG_DOT_SRC, BIG_DOT_SPRITE_SIZE);
+                  el.style.transform = `translate(${x - BIG_DOT_SPRITE_SIZE / 2}px,${y - BIG_DOT_SPRITE_SIZE / 2}px)`;
+                  el.style.display = "";
+                } else {
+                  // "ghost" and other "pacman" slots → ghost
+                  const key = `g-${row}-${col}`;
+                  activeKeys.add(key);
+                  const el = getOrCreateSprite(key, ghostSrcForCell(row, col));
+                  el.style.transform = `translate(${x - SPRITE_SIZE / 2}px,${y - SPRITE_SIZE / 2}px)`;
+                  el.style.display = "";
+                }
               }
             } else {
               const dotImg = dotImgRef.current;
