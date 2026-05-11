@@ -1,8 +1,8 @@
 fastapi
 uvicorn
-requests
-beautifulsoup4
+google-generativeai
 chromadb
 sentence-transformers
-ollama
+beautifulsoup4
+requests
 python-dotenv

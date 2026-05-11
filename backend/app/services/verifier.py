@@ -1,26 +1,37 @@
-import json
-from app.services.extractor import extrair_texto_url
-from app.services.rag import buscar_contexto
 from app.services.llm import analisar_texto
+from app.services.scraper import extract_text_from_url
 
-def verificar(texto, url):
-    if url:
-        texto = extrair_texto_url(url)
 
-    if not texto:
-        return {"erro": "Nenhum conteúdo fornecido"}
+def verificar(texto, url=None):
 
-    contexto = buscar_contexto(texto[:500])
-
-    resposta_llm = analisar_texto(texto[:1000], contexto)
-
-    try:
-        data = json.loads(resposta_llm)
-    except:
+    if not texto and not url:
         return {
-            "score": 50,
-            "classificacao": "Indeterminado",
-            "explicacao": resposta_llm
+            "reliabilityScore": 0,
+            "overallVerdict": "Nenhum conteúdo fornecido",
+            "flaggedExcerpts": []
         }
 
-    return data
+    contexto = ""
+
+    if url:
+        contexto = extract_text_from_url(url)
+
+    resultado = analisar_texto(texto, contexto)
+
+    score = resultado.get("score", 0)
+
+    classificacao = resultado.get(
+        "classificacao",
+        "Desconhecido"
+    )
+
+    explicacao = resultado.get(
+        "explicacao",
+        ""
+    )
+
+    return {
+        "reliabilityScore": score,
+        "overallVerdict": f"{classificacao}: {explicacao}",
+        "flaggedExcerpts": []
+    }

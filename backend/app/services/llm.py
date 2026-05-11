@@ -1,12 +1,42 @@
-import ollama
+import os
+import json
+from dotenv import load_dotenv
+import google.generativeai as genai
 
-MODEL = "gemma:latest"  # ou gemma:7b dependendo do que você baixar
+load_dotenv()
 
-def analisar_texto(texto, contexto):
+API_KEY = os.getenv("GOOGLE_API_KEY")
+MODEL_NAME = os.getenv("MODEL_NAME")
+
+genai.configure(api_key=API_KEY)
+
+model = genai.GenerativeModel(MODEL_NAME)
+
+
+def limpar_json(texto):
+    try:
+        return json.loads(texto)
+
+    except:
+        try:
+            inicio = texto.find("{")
+            fim = texto.rfind("}") + 1
+
+            if inicio != -1 and fim != -1:
+                return json.loads(texto[inicio:fim])
+
+        except:
+            pass
+
+    return None
+
+
+def analisar_texto(texto, contexto=""):
+
     prompt = f"""
-Você é um verificador de fatos.
+Você é um verificador de fatos rigoroso.
 
-Analise o texto abaixo:
+Analise a veracidade da afirmação abaixo.
 
 TEXTO:
 {texto}
@@ -14,17 +44,33 @@ TEXTO:
 CONTEXTO:
 {contexto}
 
-Responda em JSON:
+REGRAS:
+- Seja crítico
+- Não invente fatos
+- Não invente fontes
+- Explique claramente
+- Retorne apenas JSON
+
+FORMATO:
+
 {{
-  "score": 0-100,
-  "explicacao": "texto",
-  "classificacao": "Falso / Duvidoso / Parcialmente verdadeiro / Confiável"
+  "score": número de 0 a 100,
+  "classificacao": "Falso, Duvidoso, Parcialmente verdadeiro ou Confiável",
+  "explicacao": "explicação objetiva"
 }}
 """
 
-    response = ollama.chat(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    response = model.generate_content(prompt)
 
-    return response["message"]["content"]
+    content = response.text.strip()
+
+    resultado = limpar_json(content)
+
+    if resultado:
+        return resultado
+
+    return {
+        "score": 50,
+        "classificacao": "Duvidoso",
+        "explicacao": content
+    }
