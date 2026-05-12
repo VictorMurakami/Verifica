@@ -12,7 +12,14 @@ export async function analyzeContent(
   });
 
   if (!response.ok) {
-    throw new Error(`Erro na análise: ${response.statusText}`);
+    let detail = response.statusText;
+    try {
+      const body = await response.json();
+      if (body?.detail) detail = body.detail;
+    } catch {
+      /* corpo não-JSON: mantém statusText */
+    }
+    throw new Error(detail);
   }
 
   return response.json();

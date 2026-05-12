@@ -1,25 +1,27 @@
-from fastapi import APIRouter
-from app.services.verifier import verificar
 import traceback
+
+from fastapi import APIRouter, HTTPException
+
+from app.services.verifier import verificar
 
 router = APIRouter()
 
+
 @router.post("/api/analyze")
-def verificar_info(data: dict):
+def analyze(data: dict):
+    content = data.get("content") or data.get("texto") or data.get("text")
+    url = data.get("url")
+    request_id = data.get("id") or data.get("requestId")
 
     try:
-        texto = data.get("texto") or data.get("content") or data.get("text")
-        url = data.get("url")
+        return verificar(content=content, url=url, request_id=request_id)
 
-        resultado = verificar(texto, url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-        return resultado
-
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
-
-        return {
-            "reliabilityScore": 0,
-            "overallVerdict": f"Erro: {str(e)}",
-            "flaggedExcerpts": []
-        }
+        raise HTTPException(
+            status_code=502,
+            detail="Algo deu errado na análise. Tente novamente em instantes.",
+        )

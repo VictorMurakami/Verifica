@@ -29,8 +29,8 @@ Clone e copie os arquivos de exemplo de variáveis de ambiente:
 git clone <repo-url> verifica
 cd verifica
 
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env.local
+cp .env.example backend/.env
+cp .env.example frontend/.env.local
 ```
 
 Edite `backend/.env` e preencha sua `GOOGLE_API_KEY`.
@@ -72,16 +72,16 @@ npm run dev:frontend    # só o front
 
 ### Backend (`backend/.env`)
 
-| Variável         | Descrição                                  | Exemplo            |
-|------------------|--------------------------------------------|--------------------|
-| `GOOGLE_API_KEY` | Chave da API do Gemini                     | `AIza...`          |
-| `MODEL_NAME`     | Modelo Gemini a usar                       | `gemini-2.5-flash` |
+| Variável         | Descrição              | Exemplo            |
+| ---------------- | ---------------------- | ------------------ |
+| `GOOGLE_API_KEY` | Chave da API do Gemini | `AIza...`          |
+| `MODEL_NAME`     | Modelo Gemini a usar   | `gemini-2.5-flash` |
 
 ### Frontend (`frontend/.env.local`)
 
-| Variável              | Descrição                       | Exemplo                 |
-|-----------------------|---------------------------------|-------------------------|
-| `NEXT_PUBLIC_API_URL` | URL pública do backend          | `http://localhost:8000` |
+| Variável              | Descrição              | Exemplo                 |
+| --------------------- | ---------------------- | ----------------------- |
+| `NEXT_PUBLIC_API_URL` | URL pública do backend | `http://localhost:8000` |
 
 Referência completa: [`.env.example`](.env.example).
 
