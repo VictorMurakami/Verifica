@@ -5,7 +5,7 @@ import json
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 
 load_dotenv()
 
@@ -14,8 +14,6 @@ logger = logging.getLogger(__name__)
 API_KEY = os.getenv("GOOGLE_API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
 
-genai.configure(api_key=API_KEY)
-
 GENERATION_CONFIG = {
     "response_mime_type": "application/json",
     "temperature": 0.2,
@@ -23,11 +21,7 @@ GENERATION_CONFIG = {
     "max_output_tokens": 4096,
 }
 
-model = genai.GenerativeModel(
-    MODEL_NAME,
-    generation_config=GENERATION_CONFIG,
-)
-
+client = genai.Client(api_key=API_KEY)
 
 CATEGORIAS = [
     "linguagem_alarmista",
@@ -135,7 +129,7 @@ def analisar_texto(texto: str, contexto: str = "", origem_url: str | None = None
     )
 
     try:
-        response = model.generate_content([SYSTEM_PROMPT, user_prompt])
+        response = client.models.generate_content(model=MODEL_NAME, contents=user_prompt)
     except Exception as e:
         logger.warning("erro do gemini: %s", e)
         return {

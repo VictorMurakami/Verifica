@@ -5,3 +5,4 @@ beautifulsoup4
 trafilatura
 requests
 python-dotenv
+google-genai
