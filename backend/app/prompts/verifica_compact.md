@@ -23,7 +23,7 @@ Nenhum texto é imune a leitura crítica. `excerpts` SEMPRE contém 1 a 3 itens,
 ```json
 {
   "score": 0,
-  "verdict": "<frase curta neutra, máx 25 palavras>",
+  "verdict": "<frase curta e neutra descrevendo os indícios encontrados, sem julgar veracidade. máx 35 palavras>",
   "excerpts": [
     {
       "excerpt": "<trecho EXATO do texto, ≤200 chars>",
