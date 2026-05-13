@@ -22,7 +22,7 @@ HEADERS = {
     "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
 }
 
-MAX_CHARS = 6000
+MAX_CHARS = 15000
 MIN_USABLE_CHARS = 80
 
 GENERIC_FAIL = (
@@ -38,8 +38,12 @@ def _extract_with_trafilatura(html: str, url: str) -> str:
             url=url,
             include_comments=False,
             include_tables=False,
+            include_formatting=False,
+            include_images=False,
+            include_links=False,
             favor_recall=True,
-            deduplicate=True,
+            deduplicate=False,
+            output_format="txt",
         )
         return (text or "").strip()
     except Exception as e:
@@ -118,17 +122,24 @@ def extract_text_from_url(url: str) -> tuple[str, str | None]:
     if not html.strip():
         return "", GENERIC_FAIL
 
-    text = _extract_with_trafilatura(html, url)
-    if len(text) < MIN_USABLE_CHARS:
-        fallback = _extract_with_bs4(html)
-        if len(fallback) > len(text):
-            text = fallback
+    trafi = _extract_with_trafilatura(html, url)
+    bs4 = _extract_with_bs4(html)
+
+    # Prefere trafilatura por padrão (mais limpo), mas se o bs4 trouxer
+    # bem mais conteúdo, é sinal de que trafilatura perdeu corpo da notícia.
+    if len(bs4) > len(trafi) * 1.3:
+        text = bs4
+        chosen = "bs4"
+    else:
+        text = trafi or bs4
+        chosen = "trafilatura" if trafi else "bs4"
+
+    logger.info(
+        "extração %s para %s (html=%d, trafi=%d, bs4=%d, final=%d)",
+        chosen, url, len(html), len(trafi), len(bs4), len(text),
+    )
 
     if len(text) < MIN_USABLE_CHARS:
-        logger.info(
-            "extração insuficiente para %s (status=%s, html=%d, extraído=%d)",
-            url, status, len(html), len(text),
-        )
         return "", GENERIC_FAIL
 
     return text[:MAX_CHARS], None

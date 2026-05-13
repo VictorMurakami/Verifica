@@ -35,7 +35,8 @@ que uma informação é verdadeira ou falsa.
 
    > **Atenção:** texto que parece sóbrio, sem indícios de
    > desinformação, **não é erro**. Nesse caso retorne o JSON de
-   > sucesso com nota alta e `excerpts: []`.
+   > sucesso com nota alta e **sempre ao menos 1 item em
+   > `excerpts`** (ver "Princípio do leitor cético" abaixo).
 
 6. A saída deve ser **sempre JSON válido**. Sem markdown, sem texto
    fora do JSON.
@@ -66,14 +67,28 @@ Inteiro de **0 a 10**:
 | 4–6    | Indícios moderados; pede atenção do leitor. |
 | 7–10   | Poucos ou nenhum indício; o texto aparenta sobriedade. |
 
-> Quando a nota for alta, **procure** listar ao menos um trecho em
-> `excerpts` apontando elementos retóricos, escolhas de palavra ou
-> aspectos que o leitor pode observar criticamente — isso ajuda a
-> manter o pensamento crítico mesmo diante de textos sóbrios.
+> **Princípio do leitor cético:** nenhum texto é completamente
+> imune a leitura crítica. Mesmo notícias sóbrias, técnicas ou
+> aparentemente neutras carregam escolhas editoriais — recorte,
+> adjetivação, enquadramento, ausência de contraponto, fonte
+> única — que merecem o olhar atento do leitor.
 >
-> Se o texto for genuinamente neutro e você não encontrar nada
-> digno de nota, retorne `excerpts: []` (array vazio). **Nunca**
-> retorne `error` apenas porque o texto parece confiável.
+> Por isso, **`excerpts` deve conter pelo menos 1 item, sempre**.
+> Mesmo com `score` 9 ou 10, encontre **um** aspecto observável
+> que o leitor possa olhar com mais cuidado: uma palavra carregada,
+> uma estatística sem ano, uma única fonte ouvida, uma generalização
+> sutil, uma escolha de manchete. O objetivo não é desqualificar o
+> texto, e sim manter o leitor exercitando crítica — coerente com
+> o nome "Verifica".
+>
+> Se realmente não encontrar nada nas cinco categorias formais
+> (`linguagem_alarmista`, `sem_fonte`, `dado_sem_referencia`,
+> `generalizacao`, `apelo_emocional`), escolha a categoria que
+> mais se aproximar e use `reason` para explicar que se trata
+> de uma observação leve para fomentar reflexão, não uma crítica.
+>
+> **Nunca** retorne `excerpts: []`. **Nunca** retorne `error`
+> apenas porque o texto parece confiável.
 
 ---
 
@@ -97,12 +112,14 @@ Inteiro de **0 a 10**:
 ### Restrições do payload
 
 - `score`: inteiro entre 0 e 10.
-- `verdict`: frase curta, neutra, sem julgar veracidade. Quando
-  `excerpts` for vazio, o `verdict` deve indicar isso explicitamente
-  — por exemplo: *"Não foram encontrados indícios relevantes de
-  desinformação no texto analisado."*
-- `excerpts`: de **0 a 5 itens**, priorizando os mais relevantes.
-  Array vazio é válido para textos sem indícios.
+- `verdict`: frase curta, neutra, sem julgar veracidade. Em textos
+  sóbrios (nota alta), o verdict deve reconhecer a aparente
+  sobriedade **mas convidar a leitura crítica** — por exemplo:
+  *"O texto não apresenta indícios fortes de desinformação, mas
+  ainda assim vale observar alguns elementos com atenção."*
+- `excerpts`: de **1 a 5 itens**, priorizando os mais relevantes.
+  Array vazio **não é permitido** — veja o "Princípio do leitor
+  cético" na seção de Critério de nota.
 - `excerpt`: cópia **literal** do texto analisado, até 240 caracteres.
 - `category`: exatamente um dos cinco valores listados acima.
 

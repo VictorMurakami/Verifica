@@ -84,15 +84,19 @@ def _parse_json(texto: str):
 
     decoder = json.JSONDecoder()
     last_valid = None
-    idx = texto.find("{")
-    while idx != -1:
+    i = 0
+    n = len(texto)
+    while i < n:
+        if texto[i] != "{":
+            i += 1
+            continue
         try:
-            obj, _ = decoder.raw_decode(texto, idx)
+            obj, end = decoder.raw_decode(texto, i)
             if isinstance(obj, dict):
                 last_valid = obj
+            i = end
         except json.JSONDecodeError:
-            pass
-        idx = texto.find("{", idx + 1)
+            i += 1
 
     if last_valid is not None:
         return last_valid
@@ -198,5 +202,13 @@ def analisar_texto(texto: str, contexto: str = "", origem_url: str | None = None
 
     if "error" in resultado:
         return {"error": str(resultado["error"])[:240]}
+
+    expected = {"score", "verdict", "excerpts"}
+    missing = expected - set(resultado.keys())
+    if missing:
+        logger.warning(
+            "resposta com chaves faltando: missing=%s keys_recebidas=%s preview=%r",
+            sorted(missing), sorted(resultado.keys()), content[:500],
+        )
 
     return resultado
