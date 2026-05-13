@@ -31,7 +31,7 @@ CATEGORIAS = [
 ]
 
 
-PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "verifica.md"
+PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "verifica_compact.md" # Alterar .md para o prompt desejado.
 SYSTEM_PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
 
 GENERATION_CONFIG = {
@@ -39,7 +39,7 @@ GENERATION_CONFIG = {
     "response_mime_type": "application/json",
     "temperature": 0.2,
     "top_p": 0.9,
-    "max_output_tokens": 4096,
+    "max_output_tokens": 900,
 }
 
 
@@ -148,13 +148,12 @@ def analisar_texto(texto: str, contexto: str = "", origem_url: str | None = None
             )
         }
 
-    user_prompt = (
-        "TEXTO PARA ANÁLISE:\n"
-        f"{texto or '(vazio — use apenas o CONTEXTO)'}\n\n"
-        "CONTEXTO ADICIONAL (extraído da URL, se houver):\n"
-        f"{contexto or '(nenhum)'}\n\n"
-        "Responda APENAS com o JSON definido no formato de saída."
-    )
+    partes = []
+    if texto:
+        partes.append(f"TEXTO:\n{texto}")
+    if contexto:
+        partes.append(f"CONTEXTO:\n{contexto}")
+    user_prompt = "\n\n".join(partes)
 
     try:
         response = client.models.generate_content(
