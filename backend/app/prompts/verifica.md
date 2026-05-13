@@ -118,3 +118,21 @@ Use **apenas** quando for tecnicamente inviável analisar o texto
 (conforme a Regra 5). **Nunca** use erro quando o texto simplesmente
 não apresenta indícios de desinformação — esse caso é sucesso com
 nota alta e `excerpts: []`.
+
+---
+
+## Saída: regras finais (importantes)
+
+A resposta deve conter **apenas** o objeto JSON definido acima.
+Não emita absolutamente nada além desse objeto.
+
+**Proibido na resposta:**
+
+- Texto introdutório, explicativo, conclusivo ou de saudação.
+- Comentários, raciocínio passo a passo ou "pensamento em voz alta".
+- Checklists de auto-verificação (ex: "Valid JSON? Yes.").
+- Blocos markdown, cercas de código (```), backticks ou prefixos.
+- Reafirmar a tarefa, repetir o prompt ou descrever o que você fez.
+
+O primeiro caractere da resposta deve ser `{` e o último caractere
+deve ser `}`. Qualquer outro conteúdo invalida a resposta.

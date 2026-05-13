@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-google-generativeai
 beautifulsoup4
 trafilatura
 requests

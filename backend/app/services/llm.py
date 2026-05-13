@@ -14,12 +14,11 @@ logger = logging.getLogger(__name__)
 API_KEY = os.getenv("GOOGLE_API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
 
-GENERATION_CONFIG = {
-    "response_mime_type": "application/json",
-    "temperature": 0.2,
-    "top_p": 0.9,
-    "max_output_tokens": 4096,
-}
+if not API_KEY or API_KEY == "sua-chave-aqui":
+    raise RuntimeError(
+        "GOOGLE_API_KEY ausente. Copie .env.example para backend/.env e "
+        "preencha com uma chave válida (https://aistudio.google.com/app/apikey)."
+    )
 
 client = genai.Client(api_key=API_KEY)
 
@@ -34,6 +33,14 @@ CATEGORIAS = [
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "verifica.md"
 SYSTEM_PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
+
+GENERATION_CONFIG = {
+    "system_instruction": SYSTEM_PROMPT,
+    "response_mime_type": "application/json",
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "max_output_tokens": 4096,
+}
 
 
 def _try_close_truncated(texto: str):
@@ -57,6 +64,16 @@ def _try_close_truncated(texto: str):
 
 
 def _parse_json(texto: str):
+    """Extrai o JSON da resposta do modelo, tolerante a texto de raciocínio antes/depois.
+
+    Estratégia:
+      1. Tenta o texto inteiro como JSON (caminho feliz).
+      2. Varre cada `{` do texto e usa `JSONDecoder.raw_decode` para detectar
+         objetos válidos, mantendo o ÚLTIMO — que é sempre a resposta real
+         quando o modelo prepende raciocínio.
+      3. Como último recurso, tenta recuperar um JSON truncado (MAX_TOKENS).
+    """
+
     if not texto:
         return None
 
@@ -65,13 +82,20 @@ def _parse_json(texto: str):
     except Exception:
         pass
 
-    inicio = texto.find("{")
-    fim = texto.rfind("}") + 1
-    if inicio != -1 and fim > inicio:
+    decoder = json.JSONDecoder()
+    last_valid = None
+    idx = texto.find("{")
+    while idx != -1:
         try:
-            return json.loads(texto[inicio:fim])
-        except Exception:
+            obj, _ = decoder.raw_decode(texto, idx)
+            if isinstance(obj, dict):
+                last_valid = obj
+        except json.JSONDecodeError:
             pass
+        idx = texto.find("{", idx + 1)
+
+    if last_valid is not None:
+        return last_valid
 
     return _try_close_truncated(texto)
 
@@ -129,7 +153,11 @@ def analisar_texto(texto: str, contexto: str = "", origem_url: str | None = None
     )
 
     try:
-        response = client.models.generate_content(model=MODEL_NAME, contents=user_prompt)
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=user_prompt,
+            config=GENERATION_CONFIG,
+        )
     except Exception as e:
         logger.warning("erro do gemini: %s", e)
         return {
