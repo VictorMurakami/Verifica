@@ -8,9 +8,9 @@ interface Props {
 }
 
 function getScoreConfig(score: number) {
-  if (score <= 3)
+  if (score <= 30)
     return { color: "text-error", stroke: "stroke-error", bg: "bg-error/10", badge: "badge-error", label: "Muito Suspeito", Icon: ShieldAlert };
-  if (score <= 6)
+  if (score <= 60)
     return { color: "text-warning", stroke: "stroke-warning", bg: "bg-warning/10", badge: "badge-warning", label: "Atenção Recomendada", Icon: ShieldQuestion };
   return { color: "text-success", stroke: "stroke-success", bg: "bg-success/10", badge: "badge-success", label: "Aparentemente Confiável", Icon: ShieldCheck };
 }
@@ -19,7 +19,7 @@ export default function ScoreGauge({ score }: Props) {
   const { color, stroke, bg, badge, label, Icon } = getScoreConfig(score);
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
-  const target = circumference - (score / 10) * circumference;
+  const target = circumference - (score / 100) * circumference;
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -44,9 +44,8 @@ export default function ScoreGauge({ score }: Props) {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.4, duration: 0.5, ease: "backOut" }}
           >
-            {score}
+            {score}%
           </motion.span>
-          <span className="text-[11px] text-base-content/40 font-medium">de 10</span>
         </div>
       </div>
       <motion.div

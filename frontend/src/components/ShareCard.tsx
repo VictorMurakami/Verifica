@@ -208,7 +208,7 @@ export default function ShareCard({ result }: Props) {
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({
             title: "Verifica - Análise",
-            text: `Pontuação: ${result.reliabilityScore}/10`,
+            text: `Pontuação: ${result.reliabilityScore}%`,
             files: [file],
           });
           setOpen(false);

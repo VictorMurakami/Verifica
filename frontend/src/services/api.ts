@@ -12,14 +12,18 @@ export async function analyzeContent(
   });
 
   if (!response.ok) {
-    let detail = response.statusText;
+    let errorMessage = `Erro ${response.status}: ${response.statusText}`;
     try {
       const body = await response.json();
-      if (body?.detail) detail = body.detail;
+      if (body?.detail) {
+        errorMessage = body.detail;
+      } else if (body?.error) {
+        errorMessage = body.error;
+      }
     } catch {
-      /* corpo não-JSON: mantém statusText */
+      // If response body is not JSON, use default statusText
     }
-    throw new Error(detail);
+    throw new Error(errorMessage);
   }
 
   return response.json();

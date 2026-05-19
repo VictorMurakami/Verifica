@@ -21,7 +21,7 @@ def _clamp_score(value) -> int:
         n = int(round(float(value)))
     except Exception:
         return 5
-    return max(0, min(10, n))
+    return max(0, min(100, n))
 
 
 def _normalize_excerpts(raw):

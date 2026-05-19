@@ -59,13 +59,13 @@ Use **apenas** as cinco categorias abaixo. Não invente novas tags.
 
 ## Critério de nota
 
-Inteiro de **0 a 10**:
+Inteiro de **0% a 100%**:
 
-| Faixa  | Significado |
-|--------|-------------|
-| 0–3    | Muitos indícios fortes de suspeita. |
-| 4–6    | Indícios moderados; pede atenção do leitor. |
-| 7–10   | Poucos ou nenhum indício; o texto aparenta sobriedade. |
+| Faixa     | Significado                                            |
+|-----------|--------------------------------------------------------|
+| 0%–30%    | Muitos indícios fortes de suspeita.                    |
+| 40%–60%   | Indícios moderados; pede atenção do leitor.            |
+| 70%–100%  | Poucos ou nenhum indício; o texto aparenta sobriedade. |
 
 > **Princípio do leitor cético:** nenhum texto é completamente
 > imune a leitura crítica. Mesmo notícias sóbrias, técnicas ou
@@ -74,7 +74,7 @@ Inteiro de **0 a 10**:
 > única — que merecem o olhar atento do leitor.
 >
 > Por isso, **`excerpts` deve conter pelo menos 1 item, sempre**.
-> Mesmo com `score` 9 ou 10, encontre **um** aspecto observável
+> Mesmo com `score` 90% ou 100%, encontre **um** aspecto observável
 > que o leitor possa olhar com mais cuidado: uma palavra carregada,
 > uma estatística sem ano, uma única fonte ouvida, uma generalização
 > sutil, uma escolha de manchete. O objetivo não é desqualificar o
@@ -111,7 +111,7 @@ Inteiro de **0 a 10**:
 
 ### Restrições do payload
 
-- `score`: inteiro entre 0 e 10.
+- `score`: inteiro entre 0% e 100%.
 - `verdict`: frase curta, neutra, sem julgar veracidade. Em textos
   sóbrios (nota alta), o verdict deve reconhecer a aparente
   sobriedade **mas convidar a leitura crítica** — por exemplo:
