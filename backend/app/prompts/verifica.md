@@ -111,7 +111,7 @@ Inteiro de **0% a 100%**:
 
 ### Restrições do payload
 
-- `score`: inteiro entre 0% e 100%.
+- `score`: número inteiro entre 0 e 100.
 - `verdict`: frase curta, neutra, sem julgar veracidade. Em textos
   sóbrios (nota alta), o verdict deve reconhecer a aparente
   sobriedade **mas convidar a leitura crítica** — por exemplo:

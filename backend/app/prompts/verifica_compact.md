@@ -37,7 +37,7 @@ Nenhum texto é imune a leitura crítica. `excerpts` SEMPRE contém 1 a 3 itens,
 
 Restrições do payload:
 - A raiz é SEMPRE um objeto com as três chaves `score`, `verdict`, `excerpts`. Nunca retorne só a lista.
-- `score`: inteiro 0%–100%.
+- `score`: inteiro 0–100.
 - `excerpts`: 1 a 3 itens (NUNCA vazio).
 - `excerpt`: cópia literal do texto.
 - `category`: exatamente um dos 5 valores listados.

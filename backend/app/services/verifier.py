@@ -18,6 +18,8 @@ def _is_url(value: str) -> bool:
 
 def _clamp_score(value) -> int:
     try:
+        if isinstance(value, str):
+            value = value.replace("%", "").strip()
         n = int(round(float(value)))
     except Exception:
         return 5

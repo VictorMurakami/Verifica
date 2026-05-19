@@ -148,6 +148,19 @@ Resposta:
 
 ---
 
+## Arquitetura e Componentes Centrais
+
+### Backend (`/backend`)
+- **`app/services/llm.py`**: Gerencia a comunicação com o Google Gemini. Contém a lógica de construção do prompt, tratamento de erros da API, parsing de JSON resiliente e proteções contra *prompt injection*.
+- **`app/services/scraper.py`**: Responsável por extrair o conteúdo textual de URLs fornecidas, utilizando `trafilatura` e `BeautifulSoup` para limpar o HTML e remover ruídos (anúncios, menus).
+- **`app/prompts/verifica.md`**: Prompt principal do agente, contendo todas as instruções de comportamento, categorias de análise e exemplos de saída.
+- **`app/prompts/verifica_compact.md`**: Versão otimizada e mais curta do prompt, usada para reduzir o consumo de tokens e acelerar a resposta.
+
+### Frontend (`/frontend`)
+- **`src/app/page.tsx`**: Ponto de entrada da aplicação web. Gerencia o estado global da página, o formulário de entrada e a renderização condicional dos resultados e animações.
+
+---
+
 ## Troubleshooting
 
 - **`GOOGLE_API_KEY` ausente** → preencha em `backend/.env`.
