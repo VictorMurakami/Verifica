@@ -42,8 +42,8 @@ export default function PrivacyPage() {
             conteúdo. Por isso, <strong className="font-semibold">não cole dados pessoais</strong>, seus ou de outras pessoas.
           </li>
           <li>
-            <strong className="font-semibold">Cloudflare:</strong> hospeda o site e usa o Turnstile para diferenciar pessoas de robôs sem pedir
-            que você resolva desafios. O Turnstile segue a{" "}
+            <strong className="font-semibold">Cloudflare:</strong> hospeda o site, conta as visitas sem usar cookies (Cloudflare Web
+            Analytics) e usa o Turnstile para diferenciar pessoas de robôs sem pedir que você resolva desafios. O Turnstile segue a{" "}
             <a className="link" href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">
               Política de Privacidade da Cloudflare
               <span className="sr-only"> (abre em nova aba)</span>
