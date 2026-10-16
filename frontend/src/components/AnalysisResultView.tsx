@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { RotateCcw, AlertTriangle, BookX, BarChart3, Maximize, Heart } from "lucide-react";
 import { AnalysisResult, ExcerptCategory } from "@/types/analysis";
+import { CATEGORY_LABELS } from "@/lib/categories";
 import ScoreGauge from "./ScoreGauge";
 import ShareCard from "./ShareCard";
 
@@ -11,12 +12,12 @@ interface Props {
   onNewAnalysis: () => void;
 }
 
-const categoryConfig: Record<ExcerptCategory, { label: string; Icon: typeof AlertTriangle }> = {
-  linguagem_alarmista: { label: "Linguagem Alarmista", Icon: AlertTriangle },
-  sem_fonte: { label: "Sem Fonte", Icon: BookX },
-  dado_sem_referencia: { label: "Dado sem Referência", Icon: BarChart3 },
-  generalizacao: { label: "Generalização", Icon: Maximize },
-  apelo_emocional: { label: "Apelo Emocional", Icon: Heart },
+const categoryIcons: Record<ExcerptCategory, typeof AlertTriangle> = {
+  linguagem_alarmista: AlertTriangle,
+  sem_fonte: BookX,
+  dado_sem_referencia: BarChart3,
+  generalizacao: Maximize,
+  apelo_emocional: Heart,
 };
 
 const cardVariants = {
@@ -70,11 +71,8 @@ export default function AnalysisResultView({ result, onNewAnalysis }: Props) {
           </motion.h2>
 
           {result.flaggedExcerpts.map((excerpt, i) => {
-            const config = categoryConfig[excerpt.category] ?? {
-              label: excerpt.category,
-              Icon: AlertTriangle,
-            };
-            const { Icon } = config;
+            const label = CATEGORY_LABELS[excerpt.category] ?? excerpt.category;
+            const Icon = categoryIcons[excerpt.category] ?? AlertTriangle;
 
             return (
               <motion.div
@@ -89,7 +87,7 @@ export default function AnalysisResultView({ result, onNewAnalysis }: Props) {
                 <div className="collapse-title flex items-center gap-3 pr-10 min-h-0 py-3 sm:py-4">
                   <div className="badge badge-outline badge-sm gap-1.5 shrink-0">
                     <Icon size={12} />
-                    {config.label}
+                    {label}
                   </div>
                   <span className="text-sm text-base-content/60 truncate hidden sm:inline">
                     {excerpt.excerpt.slice(0, 60)}...
