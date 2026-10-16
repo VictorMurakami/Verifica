@@ -22,8 +22,8 @@ class StubVerifier:
         self.error = error
         self.calls = []
 
-    def analyze(self, content, request_id, fingerprint):
-        self.calls.append((content, request_id, fingerprint))
+    def analyze(self, content, request_id, fingerprint, page=None):
+        self.calls.append((content, request_id, fingerprint, page))
         if self.error:
             raise self.error
         return self.outcome
@@ -63,10 +63,11 @@ def test_success_passes_fingerprint_not_raw_ip(tmp_path):
     )
     assert response.status_code == 200
     assert response.json() == PAYLOAD
-    content, request_id, fingerprint = verifier.calls[0]
+    content, request_id, fingerprint, page = verifier.calls[0]
     assert (content, request_id) == ("Notícia", "req-1")
     assert fingerprint == fingerprint_ip(CLIENT_IP, "h" * 43)
     assert CLIENT_IP not in fingerprint
+    assert page is None
 
 
 def test_app_error_maps_status_and_retry_after(tmp_path):
@@ -224,3 +225,249 @@ def test_lifespan_skips_purge_for_injected_verifier(tmp_path, monkeypatch):
     with make_client(tmp_path, StubVerifier()):
         pass
     assert calls == []
+
+
+PAGE_HEADERS = {
+    **HEADERS,
+    "X-Verifica-Source-Url": "https://news.example/a",
+    "X-Verifica-Page-Url": "https://news.example/a/",
+    "X-Verifica-Page-Charset": "iso-8859-1",
+    "X-Verifica-Request-Id": "req-9",
+    "Content-Type": "application/octet-stream",
+}
+
+
+def test_analyze_page_happy_path(tmp_path):
+    verifier = StubVerifier()
+    response = make_client(tmp_path, verifier).post(
+        "/api/analyze-page", content=b"<html>pagina</html>", headers=PAGE_HEADERS
+    )
+    assert response.status_code == 200
+    assert response.json() == PAYLOAD
+    content, request_id, fingerprint, page = verifier.calls[0]
+    assert content == "https://news.example/a"
+    assert request_id == "req-9"
+    assert fingerprint == fingerprint_ip(CLIENT_IP, "h" * 43)
+    assert page.url == "https://news.example/a/"
+    assert page.content == b"<html>pagina</html>"
+    assert page.charset == "iso-8859-1"
+
+
+def test_analyze_page_requires_gateway(tmp_path):
+    verifier = StubVerifier()
+    response = make_client(tmp_path, verifier).post(
+        "/api/analyze-page",
+        content=b"<html></html>",
+        headers={
+            "X-Verifica-Source-Url": "https://news.example/a",
+            "X-Verifica-Page-Url": "https://news.example/a",
+        },
+    )
+    assert response.status_code == 401
+    assert verifier.calls == []
+
+
+@pytest.mark.parametrize(
+    "bad_source", ["not-a-url", "", "ftp://news.example/a", "https://news.example/" + "a" * 2048]
+)
+def test_analyze_page_rejects_invalid_source_url(tmp_path, bad_source):
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Source-Url": bad_source}
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 400
+    assert response.json() == {"detail": messages.INVALID_REQUEST}
+    assert verifier.calls == []
+
+
+@pytest.mark.parametrize("bad_page_url", ["not-a-url", "", "ftp://news.example/a"])
+def test_analyze_page_rejects_invalid_page_url(tmp_path, bad_page_url):
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Page-Url": bad_page_url}
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 400
+    assert response.json() == {"detail": messages.INVALID_REQUEST}
+    assert verifier.calls == []
+
+
+def test_analyze_page_ignores_invalid_charset_and_request_id(tmp_path):
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Page-Charset": "bad charset!", "X-Verifica-Request-Id": "linha\nforjada"}
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 200
+    _, request_id, _, page = verifier.calls[0]
+    assert request_id is None
+    assert page.charset is None
+
+
+def test_analyze_page_body_over_1mib_is_413(tmp_path):
+    verifier = StubVerifier()
+    body = b"a" * (1_048_576 + 1)
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=body, headers=PAGE_HEADERS)
+    assert response.status_code == 413
+    assert verifier.calls == []
+
+
+def test_analyze_page_body_at_1mib_is_accepted(tmp_path):
+    verifier = StubVerifier()
+    body = b"a" * 1_048_576
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=body, headers=PAGE_HEADERS)
+    assert response.status_code == 200
+
+
+def test_analyze_is_still_limited_to_32kib_after_page_route_exists(tmp_path):
+    verifier = StubVerifier()
+    body = b'{"content": "' + b"a" * 33_000 + b'"}'
+    response = make_client(tmp_path, verifier).post(
+        "/api/analyze", content=body, headers={**HEADERS, "Content-Type": "application/json"}
+    )
+    assert response.status_code == 413
+
+
+def test_analyze_page_invalid_header_is_logged(tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Source-Url": "not-a-url"}
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 400
+    assert response.json() == {"detail": messages.INVALID_REQUEST}
+    assert "outcome=erro status=400" in caplog.text
+
+
+def test_analyze_page_disconnect_is_logged_without_traceback(tmp_path, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    from starlette.requests import ClientDisconnect, Request
+
+    async def raise_disconnect(self):
+        raise ClientDisconnect()
+
+    monkeypatch.setattr(Request, "body", raise_disconnect)
+    verifier = StubVerifier()
+    response = make_client(tmp_path, verifier).post(
+        "/api/analyze-page", content=b"<html></html>", headers=PAGE_HEADERS
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": messages.INVALID_REQUEST}
+    assert "outcome=disconnect status=400" in caplog.text
+    assert "Traceback" not in caplog.text
+    assert verifier.calls == []
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "https://ex ample.com/a",
+        "https://ex.example/\x01",
+        "https://ex.example\\@evil.example/",
+        "https://user:pw@ex.example/",
+        "http://localhost/",
+        "http://192.168.0.1/",
+        "http://[::1]/",
+    ],
+)
+def test_analyze_page_rejects_hardened_source_url(tmp_path, bad_url):
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Source-Url": bad_url}
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 400
+    assert response.json() == {"detail": messages.INVALID_REQUEST}
+    assert verifier.calls == []
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "https://ex ample.com/a",
+        "https://ex.example/\x01",
+        "https://ex.example\\@evil.example/",
+        "https://user:pw@ex.example/",
+        "http://localhost/",
+        "http://192.168.0.1/",
+        "http://[::1]/",
+    ],
+)
+def test_analyze_page_rejects_hardened_page_url(tmp_path, bad_url):
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Page-Url": bad_url}
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 400
+    assert response.json() == {"detail": messages.INVALID_REQUEST}
+    assert verifier.calls == []
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "http://1.2.3.4./",
+        "http://127.1/",
+        "http://0x7f.0.0.1/",
+        "http://0177.0.0.1/",
+        "http://localhost./",
+    ],
+)
+def test_analyze_page_rejects_non_canonical_ip_literal_source_url(tmp_path, bad_url):
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Source-Url": bad_url}
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 400
+    assert response.json() == {"detail": messages.INVALID_REQUEST}
+    assert verifier.calls == []
+
+
+def test_analyze_page_accepts_backslash_outside_host(tmp_path):
+    verifier = StubVerifier()
+    headers = {
+        **PAGE_HEADERS,
+        "X-Verifica-Source-Url": "https://ex.example/?a=\\b",
+        "X-Verifica-Page-Url": "https://ex.example/?a=\\b",
+    }
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 200
+
+
+def test_analyze_page_accepts_trailing_dot_fqdn_source_url(tmp_path):
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Source-Url": "https://g1.globo.com./x"}
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=b"<html></html>", headers=headers)
+    assert response.status_code == 200
+
+
+def test_analyze_page_large_chunked_body_over_limit_is_413_without_500_log(tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    verifier = StubVerifier()
+    chunks = iter([b"a" * 600_000, b"a" * 600_000])
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=chunks, headers=PAGE_HEADERS)
+    assert response.status_code == 413
+    assert "status=500" not in caplog.text
+    assert verifier.calls == []
+
+
+def test_analyze_url_is_blocked_in_production_without_fetch_or_llm(tmp_path, monkeypatch):
+    from app.services import verifier
+    from app.services.llm import LlmClient
+
+    def fail_if_called(*args, **kwargs):
+        pytest.fail("não deveria buscar a URL nem chamar o LLM em produção")
+
+    monkeypatch.setattr(verifier, "extract_text_from_url", fail_if_called)
+    monkeypatch.setattr(LlmClient, "analyze", fail_if_called)
+
+    settings = load_settings({"OPENROUTER_API_KEY": "sk-or-test-key", "DATA_DIR": str(tmp_path), **PROD})
+    client = TestClient(create_app(settings))
+    response = client.post("/api/analyze", json={"content": "https://news.example/materia"}, headers=HEADERS)
+    assert response.status_code == 400
+    assert response.json() == {"detail": messages.URL_BLOCKED}
+
+
+def test_analyze_page_invalid_header_does_not_read_body(tmp_path, monkeypatch):
+    from starlette.requests import Request
+
+    async def fail_if_called(self):
+        pytest.fail("corpo não deveria ser lido com header inválido")
+
+    monkeypatch.setattr(Request, "body", fail_if_called)
+    verifier = StubVerifier()
+    headers = {**PAGE_HEADERS, "X-Verifica-Source-Url": "not-a-url"}
+    chunks = iter([b"a" * 600_000, b"a" * 600_000])
+    response = make_client(tmp_path, verifier).post("/api/analyze-page", content=chunks, headers=headers)
+    assert response.status_code == 400
+    assert verifier.calls == []

@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings, load_settings
 from app.core.errors import register_error_handlers
-from app.middleware.body_limit import BodySizeLimitMiddleware
+from app.middleware.body_limit import MAX_PAGE_BYTES, BodySizeLimitMiddleware
 from app.routes.verify import router
 from app.services.verifier import Verifier, build_verifier
 
@@ -66,7 +66,7 @@ def create_app(settings: Settings | None = None, verifier: Verifier | None = Non
     app.state.verifier = verifier
 
     register_error_handlers(app)
-    app.add_middleware(BodySizeLimitMiddleware)
+    app.add_middleware(BodySizeLimitMiddleware, path_limits={"/api/analyze-page": MAX_PAGE_BYTES})
     if not settings.is_production:
         app.add_middleware(
             CORSMiddleware, allow_origins=DEV_ORIGINS, allow_methods=["POST"], allow_headers=["Content-Type"]

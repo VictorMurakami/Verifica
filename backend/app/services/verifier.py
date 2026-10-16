@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import logging
 from dataclasses import dataclass
 from typing import Callable, Protocol
 from urllib.parse import urlparse
@@ -11,8 +13,11 @@ from app.services.cache import ResultCache, cache_key, canonical_url
 from app.services.db import Database
 from app.services.llm import CATEGORIAS, LlmClient, detect_injection
 from app.services.quota import QuotaStore
-from app.services.scraper import extract_text_from_url
+from app.services.safe_fetch import FetchedPage
+from app.services.scraper import extract_text, extract_text_from_url
 from app.services.throttle import Throttle
+
+logger = logging.getLogger(__name__)
 
 MAX_CONTENT_CHARS = 12_000
 MAX_EXCERPTS = 5
@@ -39,6 +44,13 @@ def is_url(value: str) -> bool:
     except ValueError:
         return False
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
+def _page_cache_key(source_url: str, texto: str) -> str:
+    # Liga o cache ao conteúdo extraído, não só à URL: conteúdo diferente não reaproveita resultado.
+    content_hash = hashlib.sha256(texto.encode("utf-8")).hexdigest()
+    material = f"u:{canonical_url(source_url)}|{content_hash}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 def clamp_score(value) -> int:
@@ -79,8 +91,11 @@ class Verifier:
     throttle: Throttle
     llm: Analyzer
     fetch_page: Callable[[str], str]
+    extract_page: Callable[[FetchedPage], str]
 
-    def analyze(self, content: str, request_id: str | None, fingerprint: str) -> AnalysisOutcome:
+    def analyze(
+        self, content: str, request_id: str | None, fingerprint: str, page: FetchedPage | None = None
+    ) -> AnalysisOutcome:
         text = (content or "").strip()
         if not text:
             raise InputError(messages.EMPTY_INPUT)
@@ -88,17 +103,28 @@ class Verifier:
             raise InputError(messages.INPUT_TOO_LONG)
 
         url = text if is_url(text) else None
-        key = cache_key(text, is_url=url is not None)
-        cached = self.cache.get(key)
-        if cached is not None:
-            return AnalysisOutcome(payload={**cached, "requestId": request_id or ""}, from_cache=True)
+        if page is not None and url is None:
+            raise InputError(messages.INVALID_REQUEST)
 
-        if url:
-            self.quota.ensure_available(fingerprint)
+        if page is not None:
             with self.throttle.fetch_slot():
-                texto, contexto = "", self.fetch_page(canonical_url(url))
+                texto, contexto = "", self.extract_page(page)
+            key = _page_cache_key(url, contexto)
+            cached = self.cache.get(key)
+            if cached is not None:
+                return AnalysisOutcome(payload={**cached, "requestId": request_id or ""}, from_cache=True)
+            self.quota.ensure_available(fingerprint)
         else:
-            texto, contexto = text, ""
+            key = cache_key(text, is_url=url is not None)
+            cached = self.cache.get(key)
+            if cached is not None:
+                return AnalysisOutcome(payload={**cached, "requestId": request_id or ""}, from_cache=True)
+            if url:
+                self.quota.ensure_available(fingerprint)
+                with self.throttle.fetch_slot():
+                    texto, contexto = "", self.fetch_page(canonical_url(url))
+            else:
+                texto, contexto = text, ""
         if detect_injection(texto) or detect_injection(contexto):
             raise InputError(messages.INJECTION)
 
@@ -121,6 +147,11 @@ class Verifier:
         return AnalysisOutcome(payload={**payload, "requestId": request_id or ""}, from_cache=False)
 
 
+def _fetch_page_disabled_in_production(url: str) -> str:
+    logger.warning("download no servidor desativado em produção")
+    raise InputError(messages.URL_BLOCKED)
+
+
 def build_verifier(settings: Settings) -> Verifier:
     db = Database(settings.data_dir / "verifica.db")
     return Verifier(
@@ -128,5 +159,6 @@ def build_verifier(settings: Settings) -> Verifier:
         quota=QuotaStore(db, per_ip_daily=settings.quota_per_ip_daily, global_daily=settings.quota_global_daily),
         throttle=Throttle(max_concurrency=settings.llm_max_concurrency, per_minute=settings.llm_per_minute),
         llm=LlmClient(api_key=settings.openrouter_api_key, model=settings.model_name),
-        fetch_page=extract_text_from_url,
+        fetch_page=_fetch_page_disabled_in_production if settings.is_production else extract_text_from_url,
+        extract_page=extract_text,
     )

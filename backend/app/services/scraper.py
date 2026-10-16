@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import codecs
 import logging
+import re
 from typing import Callable
 
 import trafilatura
@@ -14,13 +16,30 @@ logger = logging.getLogger(__name__)
 
 MAX_CHARS = 15000
 MIN_USABLE_CHARS = 80
+MAX_TAGS = 40_000
+MAX_TAG_BYTES = 16_384
+_LONG_TAG_RE = re.compile(rb"<[^>]{16384,}")
+
+# Charsets que sabemos decodificar sem ambiguidade; qualquer outro nome
+# (inclusive aliases exóticos como punycode/idna) cai no sniff de <meta charset>.
+_ALLOWED_CHARSETS = frozenset(
+    {"utf-8", "iso8859-1", "cp1252", "iso8859-15", "ascii", "utf-16-le", "utf-16-be"}
+)
 
 
-def _extract_with_trafilatura(html: str | bytes, url: str) -> str:
+def _normalize_charset(charset: str) -> str | None:
+    try:
+        name = codecs.lookup(charset).name
+    except LookupError:
+        return None
+    return name if name in _ALLOWED_CHARSETS else None
+
+
+def _extract_with_trafilatura(html: str | bytes) -> str:
     try:
         text = trafilatura.extract(
             html,
-            url=url,
+            url=None,
             include_comments=False,
             include_tables=False,
             include_formatting=False,
@@ -38,7 +57,7 @@ def _extract_with_trafilatura(html: str | bytes, url: str) -> str:
 
 def _extract_with_bs4(html: str | bytes) -> str:
     try:
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
     except Exception as e:
         logger.debug("bs4 parse falhou: %s", e)
         return ""
@@ -70,20 +89,26 @@ def _extract_with_bs4(html: str | bytes) -> str:
 
 
 def _markup(page: FetchedPage) -> str | bytes:
-    # Sem charset no header, bytes deixam trafilatura/bs4 lerem o <meta charset>.
+    # Sem charset reconhecido, bytes deixam trafilatura/bs4 lerem o <meta charset>.
     if page.charset:
-        try:
-            return page.content.decode(page.charset, errors="replace")
-        except LookupError:
-            pass
+        name = _normalize_charset(page.charset)
+        if name:
+            try:
+                return page.content.decode(name, errors="replace")
+            except (LookupError, UnicodeError):
+                pass
     return page.content
 
 
-def extract_text_from_url(url: str, fetch: Callable[[str], FetchedPage] = fetch_html) -> str:
-    page = fetch(url)
+def extract_text(page: FetchedPage) -> str:
+    tag_count = page.content.count(b"<")
+    if tag_count > MAX_TAGS or _LONG_TAG_RE.search(page.content):
+        logger.info("página recusada por complexidade (tags=%d)", tag_count)
+        raise InputError(messages.PAGE_TOO_LARGE)
+
     markup = _markup(page)
 
-    trafi = _extract_with_trafilatura(markup, page.url)
+    trafi = _extract_with_trafilatura(markup)
     bs4 = _extract_with_bs4(markup)
 
     # Prefere trafilatura (mais limpo); bs4 bem maior indica corpo perdido.
@@ -101,3 +126,7 @@ def extract_text_from_url(url: str, fetch: Callable[[str], FetchedPage] = fetch_
         raise InputError(messages.PAGE_UNREADABLE)
 
     return text[:MAX_CHARS]
+
+
+def extract_text_from_url(url: str, fetch: Callable[[str], FetchedPage] = fetch_html) -> str:
+    return extract_text(fetch(url))

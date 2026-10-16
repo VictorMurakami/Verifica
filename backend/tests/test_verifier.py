@@ -3,12 +3,14 @@ from datetime import datetime
 import pytest
 
 from app.core import messages
+from app.core.config import load_settings
 from app.core.errors import BusyError, InputError, QuotaExceeded, UpstreamError
 from app.services.cache import ResultCache
 from app.services.db import Database
 from app.services.quota import SAO_PAULO, QuotaStore
+from app.services.safe_fetch import FetchedPage
 from app.services.throttle import Throttle
-from app.services.verifier import MAX_CONTENT_CHARS, Verifier
+from app.services.verifier import MAX_CONTENT_CHARS, Verifier, build_verifier
 
 RAW = {
     "score": "87%",
@@ -45,7 +47,19 @@ class FakeFetch:
         return self.text
 
 
-def build(tmp_path, *, llm=None, fetch=None, per_ip=10, global_daily=200, per_minute=15, throttle=None):
+class FakeExtractPage:
+    def __init__(self, text=PAGE_TEXT):
+        self.text = text
+        self.calls = []
+
+    def __call__(self, page):
+        self.calls.append(page)
+        return self.text
+
+
+def build(
+    tmp_path, *, llm=None, fetch=None, extract_page=None, per_ip=10, global_daily=200, per_minute=15, throttle=None
+):
     db = Database(tmp_path / "verifica.db")
     verifier = Verifier(
         cache=ResultCache(db, ttl_seconds=86400),
@@ -55,6 +69,7 @@ def build(tmp_path, *, llm=None, fetch=None, per_ip=10, global_daily=200, per_mi
         throttle=throttle or Throttle(max_concurrency=2, per_minute=per_minute),
         llm=llm or FakeLlm(),
         fetch_page=fetch or FakeFetch(),
+        extract_page=extract_page or FakeExtractPage(),
     )
     return verifier
 
@@ -173,6 +188,85 @@ def test_busy_fetch_slot_skips_llm(tmp_path):
         with pytest.raises(BusyError):
             verifier.analyze("https://news.example/a", None, FP)
     assert llm.calls == []
+
+
+def test_page_uses_extract_page_not_fetch_page(tmp_path):
+    fetch = FakeFetch()
+    extract_page = FakeExtractPage()
+    page = FetchedPage(url="https://news.example/a", content=b"<html></html>", charset=None)
+    outcome = build(tmp_path, fetch=fetch, extract_page=extract_page).analyze(
+        "https://news.example/a", "req-1", FP, page=page
+    )
+    assert fetch.calls == []
+    assert extract_page.calls == [page]
+    assert outcome.payload["analyzedText"] == PAGE_TEXT
+
+
+def test_page_requires_url_content(tmp_path):
+    page = FetchedPage(url="https://news.example/a", content=b"<html></html>", charset=None)
+    with pytest.raises(InputError) as exc:
+        build(tmp_path).analyze("não é url", None, FP, page=page)
+    assert exc.value.message == messages.INVALID_REQUEST
+
+
+def test_page_cache_is_tied_to_extracted_content_not_just_url(tmp_path):
+    texts = iter(["Primeira versão da página. " * 5, "Segunda versão totalmente diferente. " * 5])
+
+    def extract_page(page):
+        return next(texts)
+
+    llm = FakeLlm()
+    verifier = build(tmp_path, llm=llm, extract_page=extract_page)
+    page = FetchedPage(url="https://news.example/a", content=b"<html>v1</html>", charset=None)
+    first = verifier.analyze("https://news.example/a", "req-1", FP, page=page)
+    page2 = FetchedPage(url="https://news.example/a", content=b"<html>v2</html>", charset=None)
+    second = verifier.analyze("https://news.example/a", "req-2", FP, page=page2)
+    assert first.from_cache is False
+    assert second.from_cache is False
+    assert len(llm.calls) == 2
+
+
+def test_same_page_twice_hits_cache_without_llm_or_quota(tmp_path):
+    llm = FakeLlm()
+    extract_page = FakeExtractPage()
+    verifier = build(tmp_path, llm=llm, extract_page=extract_page, per_ip=5)
+    page = FetchedPage(url="https://news.example/a", content=b"<html>same</html>", charset=None)
+    first = verifier.analyze("https://news.example/a", "req-1", FP, page=page)
+    before = verifier.quota.usage(FP)
+    second = verifier.analyze("https://news.example/a", "req-2", FP, page=page)
+    after = verifier.quota.usage(FP)
+    assert first.from_cache is False
+    assert second.from_cache is True
+    assert len(llm.calls) == 1
+    assert before == after
+
+
+def test_page_cache_hit_bypasses_exhausted_quota(tmp_path):
+    llm = FakeLlm()
+    extract_page = FakeExtractPage()
+    verifier = build(tmp_path, llm=llm, extract_page=extract_page, per_ip=1)
+    page = FetchedPage(url="https://news.example/a", content=b"<html>same</html>", charset=None)
+    first = verifier.analyze("https://news.example/a", "req-1", FP, page=page)
+    assert first.from_cache is False
+    second = verifier.analyze("https://news.example/a", "req-2", FP, page=page)
+    assert second.from_cache is True
+    assert len(llm.calls) == 1
+
+
+def test_build_verifier_disables_fetch_page_in_production(tmp_path):
+    settings = load_settings(
+        {
+            "ENV": "production",
+            "OPENROUTER_API_KEY": "sk-or-test-key",
+            "GATEWAY_KEY": "g" * 43,
+            "IP_HASH_KEY": "h" * 43,
+            "DATA_DIR": str(tmp_path),
+        }
+    )
+    verifier = build_verifier(settings)
+    with pytest.raises(InputError) as exc:
+        verifier.fetch_page("https://x.example/")
+    assert exc.value.message == messages.URL_BLOCKED
 
 
 def test_long_fields_are_truncated(tmp_path):
