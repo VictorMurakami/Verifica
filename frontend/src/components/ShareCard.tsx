@@ -81,7 +81,6 @@ async function renderCard(result: AnalysisResult): Promise<Blob> {
   const logoH = 28 * S;
   const logoW = (logoImg.width / logoImg.height) * logoH;
 
-  // Pre-measure category badges so wrapped rows get the height they need.
   const categoryLabels = [...new Set(result.flaggedExcerpts.map((e) => e.category))].map(
     (cat) => CATEGORY_LABELS[cat] ?? cat,
   );
@@ -171,7 +170,6 @@ async function renderCard(result: AnalysisResult): Promise<Blob> {
   });
   y += boxH + 32 * S;
 
-  // Category badges, wrapped across as many rows as layoutBadgeRows produced.
   if (badgeRows.length > 0) {
     ctx.font = `500 ${15 * S}px ${font}`;
     for (const row of badgeRows) {
@@ -229,8 +227,6 @@ export default function ShareCard({ result }: Props) {
     else if (!open && dialog.open) dialog.close();
   }, [open]);
 
-  // Keep React state in sync with Esc/native close, and return focus
-  // to the button that opened the modal.
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -242,7 +238,6 @@ export default function ShareCard({ result }: Props) {
     return () => dialog.removeEventListener("close", handleClose);
   }, []);
 
-  // Revoke the last preview object URL on unmount.
   useEffect(() => {
     return () => {
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -284,8 +279,7 @@ export default function ShareCard({ result }: Props) {
     if (e.target === e.currentTarget) closeModal(); // click on ::backdrop
   }
 
-  // The File is already in state; share() is invoked synchronously, with
-  // no await before it, so the OS share sheet keeps the click's user activation.
+  // No await before share(): Safari drops the click's user activation and refuses the share sheet.
   function handleShare() {
     if (actionInProgressRef.current || !previewFile) return;
     actionInProgressRef.current = true;

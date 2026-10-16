@@ -3,9 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
-// The image renderer reads neither woff2 nor variable fonts, so static Geist
-// weights live in the repository. They are read on first render, not on import:
-// the images are prerendered, and the deployed Worker has no filesystem.
+// next/og reads only static TTF/WOFF; load on first render, since the deployed Worker has no filesystem.
 const fontDirectory = join(process.cwd(), "src/assets/fonts");
 const loadFonts = () =>
   Promise.all(
@@ -28,7 +26,6 @@ let logoDataUri: ReturnType<typeof loadLogoDataUri> | undefined;
 const LOGO_WIDTH = 560;
 const LOGO_HEIGHT = Math.round((LOGO_WIDTH * 143) / 939);
 
-/** Link preview for WhatsApp, LinkedIn, Slack and X. */
 export async function renderShareImage(size: { width: number; height: number }) {
   const [logo, loadedFonts] = await Promise.all([
     (logoDataUri ??= loadLogoDataUri()),

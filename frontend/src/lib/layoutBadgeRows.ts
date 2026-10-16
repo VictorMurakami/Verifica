@@ -1,7 +1,4 @@
-/**
- * Greedily packs badge widths into rows that fit within maxWidth, so callers
- * can reserve the right height instead of cutting off wrapped rows.
- */
+// Shared by the height calculation and the drawing, so wrapped rows are never cut off.
 export function layoutBadgeRows(widths: number[], maxWidth: number, gap: number): number[][] {
   const rows: number[][] = [];
   let currentRow: number[] = [];
