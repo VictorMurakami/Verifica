@@ -4,6 +4,7 @@ INVALID_REQUEST = "Não entendemos o pedido. Recarregue a página e tente de nov
 REQUEST_TOO_LARGE = "O conteúdo enviado é grande demais. Cole só o trecho principal da notícia."
 UNAUTHORIZED = "Acesso não autorizado."
 INJECTION = "Não conseguimos analisar este texto. Por favor, envie apenas conteúdos noticiosos reais."
+NOT_ANALYZABLE = "Este conteúdo não parece uma notícia. Envie o texto ou o link de uma matéria jornalística."
 
 URL_BLOCKED = "Esse link não pode ser analisado. Cole o texto da notícia diretamente."
 URL_UNREACHABLE = "Não encontramos este endereço. Verifique se o link está correto."
