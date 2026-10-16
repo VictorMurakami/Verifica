@@ -2,6 +2,10 @@
 # Instalado como /usr/local/sbin/verifica-egress-guard (root). Idempotente, sem janela sem a regra.
 set -euo pipefail
 
+# Serializa serviço e timer: execuções simultâneas apagavam a mesma duplicata e falhavam.
+exec 9>/run/verifica-egress-guard.lock
+flock -w 30 9
+
 BRIDGE=br-verifica
 CHAIN=VERIFICA-EGRESS
 # Faixas Cloudflare (https://www.cloudflare.com/ips-v4, conferidas em 2026-10-16).
