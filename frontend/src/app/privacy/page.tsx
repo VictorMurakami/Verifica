@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import NextLink from "next/link";
 import { ArrowLeft } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Política de Privacidade",
+  description: "Como o Verifica trata o texto ou link que você envia para análise.",
+  alternates: { canonical: "/privacy" },
+};
 
 const SECTION = "space-y-2";
 const HEADING = "text-xl leading-7 font-semibold";
