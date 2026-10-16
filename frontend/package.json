@@ -8,7 +8,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p worker/tsconfig.json",
-    "deploy": "next build && ! grep -rqs localhost:8000 out && wrangler deploy"
+    "deploy": "test -n \"$NEXT_PUBLIC_TURNSTILE_SITE_KEY\" || { echo 'NEXT_PUBLIC_TURNSTILE_SITE_KEY ausente' >&2; exit 1; }; next build && grep -rqsF \"$NEXT_PUBLIC_TURNSTILE_SITE_KEY\" out && ! grep -rqs localhost:8000 out && wrangler deploy"
   },
   "dependencies": {
     "daisyui": "^5.5.19",
