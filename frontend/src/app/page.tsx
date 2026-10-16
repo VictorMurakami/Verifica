@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Shield, Zap, Lock, Sliders } from "lucide-react";
 import { useDebug } from "@/context/DebugContext";
 import ThemeLogo from "@/components/ThemeLogo";
@@ -10,6 +10,7 @@ import AnalysisResultView from "@/components/AnalysisResultView";
 import { AnalysisRequest, AnalysisResult } from "@/types/analysis";
 import { analyzeContent } from "@/services/api";
 import { getMockResult } from "@/services/mock";
+import { useTurnstile } from "@/hooks/useTurnstile";
 
 export default function Home() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -18,6 +19,8 @@ export default function Home() {
   const { debugMode, setDebugMode } = useDebug();
   const [mockScore, setMockScore] = useState(3);
   const [mockDelay, setMockDelay] = useState(1500);
+  const { containerRef: turnstileRef, getToken } = useTurnstile(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
+  const reduceMotion = useReducedMotion();
 
   async function handleSubmit(request: AnalysisRequest) {
     setIsLoading(true);
@@ -28,7 +31,8 @@ export default function Home() {
         data.reliabilityScore = mockScore;
         setResult(data);
       } else {
-        const data = await analyzeContent(request);
+        const turnstileToken = await getToken();
+        const data = await analyzeContent(request, turnstileToken);
         setResult(data);
       }
     } catch (err) {
@@ -115,9 +119,9 @@ export default function Home() {
             <AnimatePresence>
               {error && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
+                  initial={reduceMotion ? false : { opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
+                  exit={reduceMotion ? {} : { opacity: 0, height: 0 }}
                   role="alert"
                   className="alert alert-error shadow-sm text-sm"
                 >
@@ -130,12 +134,12 @@ export default function Home() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
-              className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-base-content/30 text-xs sm:text-sm pt-2"
+              className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-base-content/70 text-xs sm:text-sm pt-2"
             >
               {[
                 { Icon: Shield, text: "Gratuito" },
                 { Icon: Zap, text: "Análise por IA" },
-                { Icon: Lock, text: "Sem dados salvos" },
+                { Icon: Lock, text: "Sem cadastro" },
               ].map(({ Icon, text }) => (
                 <span key={text} className="flex items-center gap-1.5">
                   <Icon size={14} strokeWidth={1.5} />
@@ -157,6 +161,7 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+      <div ref={turnstileRef} aria-hidden="true" />
     </main>
   );
 }

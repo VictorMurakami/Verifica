@@ -96,7 +96,7 @@ async function renderCard(result: AnalysisResult): Promise<string> {
   
   ctx.font = `400 ${16 * S}px ${font}`;
   ctx.fillStyle = "rgba(166,173,186,0.4)";
-  const urlText = "ai-verifica.vercel.app";
+  const urlText = "verifica.kaorabr.com";
   const urlW = ctx.measureText(urlText).width;
   ctx.fillText(urlText, W - PAD - urlW, y + 22 * S);
   

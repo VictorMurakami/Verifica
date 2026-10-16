@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Heart, Coffee, X, ExternalLink, Code2 } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Heart, Coffee, X, ExternalLink, Code2, ShieldCheck } from "lucide-react";
+import NextLink from "next/link";
 
 export default function Footer() {
   const [showTip, setShowTip] = useState(false);
+  const pathname = usePathname();
+  const isPrivacyPage = pathname === "/privacy";
 
   return (
     <>
       <footer className="py-6 px-4">
-        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-base-content/40">
+        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-base-content/70">
           <span>Projeto sem fins lucrativos de utilidade pública</span>
           <div className="flex items-center gap-3">
             <a
@@ -21,6 +25,16 @@ export default function Footer() {
               <Code2 size={14} />
               GitHub
             </a>
+            <NextLink
+              href="/privacy"
+              aria-current={isPrivacyPage ? "page" : undefined}
+              className={`btn btn-ghost btn-xs gap-1.5 rounded-full hover:text-base-content/70 ${
+                isPrivacyPage ? "text-base-content/80" : ""
+              }`}
+            >
+              <ShieldCheck size={14} />
+              Privacidade
+            </NextLink>
             <button
               onClick={() => setShowTip(true)}
               className="btn btn-ghost btn-xs gap-1.5 rounded-full hover:text-base-content/70"
