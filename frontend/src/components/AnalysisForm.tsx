@@ -3,21 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Link, FileText, Loader2 } from "lucide-react";
-import { AnalysisRequest, InputType } from "@/types/analysis";
+import { AnalysisRequest } from "@/types/analysis";
+import { detectInputType } from "@/lib/inputType";
 import NextLink from "next/link";
 
 interface Props {
   onSubmit: (request: AnalysisRequest) => void;
   isLoading: boolean;
-}
-
-function detectInputType(value: string): InputType {
-  try {
-    new URL(value);
-    return "url";
-  } catch {
-    return "text";
-  }
 }
 
 export default function AnalysisForm({ onSubmit, isLoading }: Props) {
