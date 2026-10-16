@@ -119,7 +119,7 @@ async function renderCard(result: AnalysisResult): Promise<Blob> {
 
   ctx.font = `400 ${18 * S}px ${font}`;
   ctx.fillStyle = "rgba(166,173,186,0.8)";
-  const urlText = "verifica.kaorabr.com";
+  const urlText = SITE_URL.host;
   const urlW = ctx.measureText(urlText).width;
   ctx.fillText(urlText, W - PAD - urlW, y + 22 * S);
 
