@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "verifica",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-15",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "verifica.kaorabr.com", "custom_domain": true }],
+  "assets": {
+    "directory": "./out",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "not_found_handling": "404-page"
+  },
+  "ratelimits": [
+    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 3, "period": 60 } }
+  ],
+  "vpc_services": [
+    { "binding": "ORIGIN", "service_id": "01a142ac-7a8a-7b20-a2cd-401f9b7bb062", "remote": true }
+  ],
+  "vars": {
+    "ORIGIN_URL": "http://backend:8000",
+    "ALLOWED_ORIGIN": "https://verifica.kaorabr.com",
+    "TURNSTILE_HOSTNAME": "verifica.kaorabr.com"
+  },
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
+}
