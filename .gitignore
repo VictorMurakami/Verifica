@@ -25,9 +25,13 @@ yarn-debug.log*
 yarn-error.log*
 
 # Local data / databases
-backend/data/db/
+backend/data/
 *.sqlite3
 *.sqlite
+
+# Cloudflare
+frontend/.wrangler/
+.dev.vars
 
 # OS
 .DS_Store
