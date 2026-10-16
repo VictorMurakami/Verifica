@@ -24,30 +24,41 @@ function run(cmd, args, opts = {}) {
 }
 
 function resolveSystemPython() {
-  for (const candidate of isWindows ? ["python", "py"] : ["python3", "python"]) {
-    const check = spawnSync(candidate, ["--version"], { stdio: "ignore" });
+  const candidates = isWindows ? ["py", "python"] : ["python3.11", "python3", "python"];
+  for (const candidate of candidates) {
+    const check = spawnSync(
+      candidate,
+      ["-c", "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"],
+      { stdio: "ignore" },
+    );
     if (check.status === 0) return candidate;
   }
-  console.error("Python não encontrado no PATH. Instale Python 3.10+ e tente novamente.");
+  console.error("Python 3.11+ não encontrado no PATH. Instale Python 3.11 e tente novamente.");
   process.exit(1);
 }
 
 const subcommand = process.argv[2];
+
+function requireVenv() {
+  if (!existsSync(venvPython)) {
+    console.error("venv não encontrado. Rode `npm run setup:backend` primeiro.");
+    process.exit(1);
+  }
+}
 
 if (subcommand === "setup") {
   const python = resolveSystemPython();
   if (!existsSync(venvPython)) {
     run(python, ["-m", "venv", ".venv"]);
   }
-  run(venvPython, ["-m", "pip", "install", "--upgrade", "pip"]);
-  run(venvPython, ["-m", "pip", "install", "-r", "requirements.txt"]);
+  run(venvPython, ["-m", "pip", "install", "--require-hashes", "-r", "requirements-dev.txt"]);
 } else if (subcommand === "dev") {
-  if (!existsSync(venvPython)) {
-    console.error("venv não encontrado. Rode `npm run setup:backend` primeiro.");
-    process.exit(1);
-  }
+  requireVenv();
   run(venvPython, ["run.py"]);
+} else if (subcommand === "test") {
+  requireVenv();
+  run(venvPython, ["-m", "pytest"]);
 } else {
-  console.error(`Uso: node scripts/backend.mjs <setup|dev>`);
+  console.error(`Uso: node scripts/backend.mjs <setup|dev|test>`);
   process.exit(1);
 }

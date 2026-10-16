@@ -2,7 +2,7 @@
   "name": "verifica",
   "private": true,
   "version": "0.1.0",
-  "description": "Verificador de fatos com FastAPI + Next.js (Gemini AI + RAG).",
+  "description": "Verificador de indícios de desinformação: FastAPI + Next.js, Gemma 4 via OpenRouter, Cloudflare Workers.",
   "scripts": {
     "setup": "npm run setup:backend && npm run setup:frontend",
     "setup:backend": "node scripts/backend.mjs setup",
@@ -10,8 +10,11 @@
     "dev": "concurrently -n backend,frontend -c blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "node scripts/backend.mjs dev",
     "dev:frontend": "cd frontend && npm run dev",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "node scripts/backend.mjs test",
+    "test:frontend": "cd frontend && npm test",
     "build:frontend": "cd frontend && npm run build",
-    "start:frontend": "cd frontend && npm run start",
+    "deploy:frontend": "cd frontend && npm run deploy",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"
   },

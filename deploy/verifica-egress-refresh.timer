@@ -1,0 +1,10 @@
+[Unit]
+Description=Verifica: timer de reaplicacao do firewall de saida
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

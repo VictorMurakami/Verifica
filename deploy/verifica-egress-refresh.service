@@ -1,0 +1,6 @@
+[Unit]
+Description=Verifica: reaplica o firewall de saida do container
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/verifica-egress-guard

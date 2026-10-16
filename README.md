@@ -1,168 +1,129 @@
 # Verifica
 
-Verificador de fatos com IA. Backend em **FastAPI** (Gemini + RAG com ChromaDB) e frontend em **Next.js 16** com Tailwind + daisyUI.
+Verificador de indícios de desinformação com IA. Backend em **FastAPI** (Gemma 4 via OpenRouter, tier gratuito) e frontend em **Next.js 16** exportado como site estático, servido por um **Cloudflare Worker** em `verifica.kaorabr.com`.
+
+```
+navegador ─► Cloudflare Worker (assets + /api: Turnstile, rate limit)
+                 │  binding Workers VPC + gateway key
+                 ▼
+           túnel "verifica" (sem hostname público) ─► servidor doméstico
+                                                       backend (Docker isolado)
+```
 
 ```
 .
-├── backend/      # API FastAPI (Python)
-├── frontend/     # Aplicação Next.js (TypeScript)
-├── docker-compose.yml
-└── package.json  # scripts utilitários para subir tudo junto
+├── backend/   # API FastAPI (Python 3.11)
+├── frontend/  # Next.js (export estático) + worker/ (gateway Cloudflare)
+├── deploy/    # compose de produção, firewall e script de deploy
+└── scripts/   # utilitários de dev
 ```
-
----
 
 ## Pré-requisitos
 
-- **Node.js 20+** e npm
-- **Python 3.11+** e pip
-- (opcional) **Docker** + **Docker Compose**
-- Uma chave da [Google AI Studio](https://aistudio.google.com/app/apikey) para o Gemini
+- Node.js 22+ e npm
+- Python 3.11
+- Docker (para gerar locks e testar a imagem)
+- Uma chave do [OpenRouter](https://openrouter.ai/keys)
 
----
-
-## Configuração rápida (1ª vez)
-
-Clone e copie os arquivos de exemplo de variáveis de ambiente:
+## Desenvolvimento
 
 ```bash
-git clone <repo-url> verifica
-cd verifica
-
-cp .env.example backend/.env
-cp .env.example frontend/.env.local
+cp backend/.env.example backend/.env            # preencha OPENROUTER_API_KEY
+cp frontend/.env.example frontend/.env.development.local   # só o next dev lê
+npm install
+npm run setup     # venv do backend (deps com hash) + npm install do front
+npm run dev       # backend :8000 + frontend :3000
 ```
 
-Edite `backend/.env` e preencha sua `GOOGLE_API_KEY`.
+Em dev o backend roda com `ENV=development`: CORS liberado para `localhost:3000`, `/docs` ativo e sem gateway key. O front usa a sitekey de teste do Turnstile.
 
-Instale as dependências do backend e frontend de uma vez:
+## Testes
 
 ```bash
-npm install        # instala concurrently na raiz
-npm run setup      # cria venv do Python e instala libs do front
+npm test                 # backend (pytest) + frontend (vitest)
+cd frontend && npm run lint && npm run typecheck
 ```
 
-> O `setup` faz: cria `backend/.venv`, instala `requirements.txt`, roda `npm install` em `frontend/`.
+## Limites e proteções
 
----
+| Camada | Proteção |
+|---|---|
+| Worker | método/rota, body ≤ 32 KB, `Origin`, 3 req/min por IP, Turnstile |
+| Workers VPC | backend sem endereço público; só o Worker chega, por dentro do túnel |
+| Backend | gateway key, schema, SSRF guard, cache 24 h, 2 chamadas simultâneas, 15/min, 10/dia por IP, 200/dia no total |
+| Servidor | saída só para a Cloudflare (allowlist); LAN, host e IP público bloqueados; download de páginas no Worker |
 
-## Subindo tudo junto (front + back)
+O backend não sobe com modelo que não termine em `:free` nem com segredos de exemplo (`troque-…`).
+
+## Dependências do backend
+
+Edite `backend/requirements.in` e recompile os locks com hash:
 
 ```bash
-npm run dev
+docker run --rm -v "$PWD/backend":/w -w /w python:3.11-slim sh -c "pip install -q pip-tools && pip-compile -q --generate-hashes --strip-extras --allow-unsafe -o requirements.txt requirements.in && pip-compile -q --generate-hashes --strip-extras --allow-unsafe -o requirements-dev.txt requirements-dev.in"
 ```
 
-Isso usa `concurrently` para rodar:
+## Deploy
 
-- Backend em `http://localhost:8000` (FastAPI com reload)
-- Frontend em `http://localhost:3000` (Next.js dev)
+### Backend (servidor)
 
-Pressione `Ctrl+C` uma vez para encerrar ambos.
-
-### Rodar separadamente
+Uma vez, com `sudo`:
 
 ```bash
-npm run dev:backend     # só a API
-npm run dev:frontend    # só o front
+sudo install -m 0755 -o root -g root /opt/verifica/deploy/egress-guard.sh /usr/local/sbin/verifica-egress-guard
+sudo install -m 0644 -o root -g root /opt/verifica/deploy/verifica-egress.service /opt/verifica/deploy/verifica-egress-refresh.service /opt/verifica/deploy/verifica-egress-refresh.timer /opt/verifica/deploy/verifica.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now verifica-egress.service verifica-egress-refresh.timer
 ```
 
----
-
-## Variáveis de ambiente
-
-### Backend (`backend/.env`)
-
-| Variável         | Descrição              | Exemplo            |
-| ---------------- | ---------------------- | ------------------ |
-| `GOOGLE_API_KEY` | Chave da API do Gemini | `AIza...`          |
-| `MODEL_NAME`     | Modelo Gemini a usar   | `gemini-2.5-flash` |
-
-### Frontend (`frontend/.env.local`)
-
-| Variável              | Descrição              | Exemplo                 |
-| --------------------- | ---------------------- | ----------------------- |
-| `NEXT_PUBLIC_API_URL` | URL pública do backend | `http://localhost:8000` |
-
-Referência completa: [`.env.example`](.env.example).
-
----
-
-## Docker (subida única)
-
-Para subir front + back em containers:
+Sempre que `deploy/egress-guard.sh` mudar, reinstale a cópia em `/usr/local/sbin` (o `deploy.sh` recusa o deploy se as duas divergirem):
 
 ```bash
-cp backend/.env.example backend/.env   # garanta sua chave aqui
-docker compose up --build
+sudo install -m 0755 -o root -g root /opt/verifica/deploy/egress-guard.sh /usr/local/sbin/verifica-egress-guard
 ```
 
-Ou via npm:
+Crie `deploy/.env` (a partir de `deploy/.env.example`, `chmod 600`) e habilite `verifica.service` sem `--now` (ele sobe o compose com `--no-build`, e ainda não existe imagem construída):
 
 ```bash
-npm run docker:up
-npm run docker:down
+sudo systemctl enable verifica.service
 ```
 
-Serviços expostos:
-
-- `http://localhost:8000` — API
-- `http://localhost:3000` — frontend
-
-O volume `./backend/data` é montado para persistir o índice vetorial local.
-
----
-
-## Build de produção (sem Docker)
+A cada versão:
 
 ```bash
-npm run build:frontend
-npm run start:frontend     # serve o build em :3000
-
-# backend
-cd backend
-.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+/opt/verifica/deploy/deploy.sh                                # origin/master
+/opt/verifica/deploy/deploy.sh --allow-branch origin/<branch>  # ref fora de origin/master
 ```
 
----
+O primeiro `deploy.sh` constrói a imagem e sobe o compose; a partir daí, o boot usa `verifica.service` com `--no-build`.
 
-## Endpoints principais
+### Imagens
 
-`POST /api/analyze`
+As imagens do backend (`python:3.11-slim`) e do túnel (`cloudflare/cloudflared`) são fixadas por digest no `backend/Dockerfile` e no `deploy/compose.yml`: não há patch automático. Para atualizar:
 
-```json
-{
-  "texto": "Texto a verificar",
-  "url": "https://opcional.com/artigo"
-}
+```bash
+docker buildx imagetools inspect python:3.11-slim
+docker buildx imagetools inspect cloudflare/cloudflared:<versão>
 ```
 
-Resposta:
+Troque o digest correspondente no `Dockerfile`/`compose.yml`, commit e rode o `deploy.sh`.
 
-```json
-{
-  "reliabilityScore": 0,
-  "overallVerdict": "Classificação: explicação",
-  "flaggedExcerpts": []
-}
+`docker compose config` e `docker inspect` mostram segredos em claro; use `docker compose -f deploy/compose.yml config --no-interpolate` para inspecionar sem vazar valores.
+
+Risco aceito: o volume `verifica-data` não tem cota de disco própria (guarda só o cache de até 2 000 linhas e os contadores de cota); os logs têm rotação (`max-size`/`max-file` no compose).
+
+Se um `deploy.sh` for reprovado (falha de descoberta de IP/gateway ou do teste de isolamento), ele derruba o compose e marca `/home/kami/.verifica-deploy-failed`: `verifica.service` não sobe nesse ref no boot até o marcador ser apagado. Para recuperar: corrija o problema e rode o `deploy.sh` de novo — ao passar, ele apaga o marcador sozinho.
+
+### Frontend + Worker
+
+```bash
+cd frontend
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=<sitekey> npm run deploy
+npx wrangler secret put TURNSTILE_SECRET   # e GATEWAY_KEY
 ```
 
----
+### Operação
 
-## Arquitetura e Componentes Centrais
-
-### Backend (`/backend`)
-- **`app/services/llm.py`**: Gerencia a comunicação com o Google Gemini. Contém a lógica de construção do prompt, tratamento de erros da API, parsing de JSON resiliente e proteções contra *prompt injection*.
-- **`app/services/scraper.py`**: Responsável por extrair o conteúdo textual de URLs fornecidas, utilizando `trafilatura` e `BeautifulSoup` para limpar o HTML e remover ruídos (anúncios, menus).
-- **`app/prompts/verifica.md`**: Prompt principal do agente, contendo todas as instruções de comportamento, categorias de análise e exemplos de saída.
-- **`app/prompts/verifica_compact.md`**: Versão otimizada e mais curta do prompt, usada para reduzir o consumo de tokens e acelerar a resposta.
-
-### Frontend (`/frontend`)
-- **`src/app/page.tsx`**: Ponto de entrada da aplicação web. Gerencia o estado global da página, o formulário de entrada e a renderização condicional dos resultados e animações.
-
----
-
-## Troubleshooting
-
-- **`GOOGLE_API_KEY` ausente** → preencha em `backend/.env`.
-- **Erro ao instalar `sentence-transformers`** → garanta Python 3.11+; em macOS pode precisar `xcode-select --install`.
-- **CORS no front** → backend já libera `*`; verifique se `NEXT_PUBLIC_API_URL` aponta para `http://localhost:8000`.
+- Workers VPC está em beta. Se mudar ou passar a custar: hostname público + Access, sem o binding `ORIGIN`, com `ORIGIN_URL` público e os secrets `ACCESS_CLIENT_ID`/`ACCESS_CLIENT_SECRET` (o Worker já suporta).
+- Consumo do OpenRouter: `GET https://openrouter.ai/api/v1/key`.
+- Trocar de modelo: `MODEL_NAME` com outro modelo `:free` em `deploy/.env` + `deploy.sh`.
