@@ -17,7 +17,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { debugMode, setDebugMode } = useDebug();
-  const [mockScore, setMockScore] = useState(3);
+  const [mockScore, setMockScore] = useState(10);
   const [mockDelay, setMockDelay] = useState(1500);
   const { containerRef: turnstileRef, getToken } = useTurnstile(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
   const reduceMotion = useReducedMotion();
@@ -67,8 +67,8 @@ export default function Home() {
               <div className="card-body p-4 gap-3">
                 <span className="badge badge-warning badge-xs">Debug</span>
                 <label className="form-control">
-                  <span className="label-text text-xs">Score: {mockScore}</span>
-                  <input type="range" min={1} max={10} value={mockScore} onChange={(e) => setMockScore(Number(e.target.value))} className="range range-xs range-warning" />
+                  <span className="label-text text-xs">Score: {mockScore}%</span>
+                  <input type="range" min={0} max={100} step={1} value={mockScore} onChange={(e) => setMockScore(Number(e.target.value))} className="range range-xs range-warning" />
                 </label>
                 <label className="form-control">
                   <span className="label-text text-xs">Delay: {mockDelay}ms</span>

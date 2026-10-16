@@ -2,25 +2,24 @@
 
 import { useState, useCallback } from "react";
 import { Download, Share2, X } from "lucide-react";
-import { AnalysisResult, ExcerptCategory } from "@/types/analysis";
+import { AnalysisResult } from "@/types/analysis";
+import { CATEGORY_LABELS } from "@/lib/categories";
+import { ScoreBand, scoreBand, SCORE_LABELS } from "@/lib/score";
 
 interface Props {
   result: AnalysisResult;
 }
 
-function getScoreConfig(score: number) {
-  if (score <= 3) return { label: "Muito Suspeito", color: "#f87171" };
-  if (score <= 6) return { label: "Atenção Recomendada", color: "#fbbf24" };
-  return { label: "Aparentemente Confiável", color: "#4ade80" };
-}
-
-const categoryLabels: Record<ExcerptCategory, string> = {
-  linguagem_alarmista: "Linguagem Alarmista",
-  sem_fonte: "Sem Fonte",
-  dado_sem_referencia: "Dado sem Referência",
-  generalizacao: "Generalização",
-  apelo_emocional: "Apelo Emocional",
+const SCORE_COLORS: Record<ScoreBand, string> = {
+  suspicious: "#f87171",
+  attention: "#fbbf24",
+  reliable: "#4ade80",
 };
+
+function getScoreConfig(score: number) {
+  const band = scoreBand(score);
+  return { label: SCORE_LABELS[band], color: SCORE_COLORS[band] };
+}
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, lineHeight: number) {
   const words = text.split(" ");
@@ -94,8 +93,8 @@ async function renderCard(result: AnalysisResult): Promise<string> {
   // Logo
   ctx.drawImage(logoImg, PAD, y, logoW, logoH);
   
-  ctx.font = `400 ${16 * S}px ${font}`;
-  ctx.fillStyle = "rgba(166,173,186,0.4)";
+  ctx.font = `400 ${18 * S}px ${font}`;
+  ctx.fillStyle = "rgba(166,173,186,0.8)";
   const urlText = "verifica.kaorabr.com";
   const urlW = ctx.measureText(urlText).width;
   ctx.fillText(urlText, W - PAD - urlW, y + 22 * S);
@@ -108,10 +107,10 @@ async function renderCard(result: AnalysisResult): Promise<string> {
   ctx.font = `800 ${80 * S}px ${font}`;
   const scoreW = ctx.measureText(scoreStr).width;
   ctx.fillStyle = scoreConfig.color;
-  // Draw score and /10 side by side, both centered as a group
+  // Draw score and % side by side, both centered as a group
   ctx.font = `400 ${30 * S}px ${font}`;
-  const slashW = ctx.measureText("/10").width;
-  const groupW = scoreW + 8 * S + slashW;
+  const percentW = ctx.measureText("%").width;
+  const groupW = scoreW + 8 * S + percentW;
   const groupX = W / 2 - groupW / 2;
 
   ctx.font = `800 ${80 * S}px ${font}`;
@@ -120,8 +119,8 @@ async function renderCard(result: AnalysisResult): Promise<string> {
   ctx.fillText(scoreStr, groupX, y + 70 * S);
 
   ctx.font = `400 ${30 * S}px ${font}`;
-  ctx.fillStyle = "rgba(166,173,186,0.45)";
-  ctx.fillText("/10", groupX + scoreW + 8 * S, y + 70 * S);
+  ctx.fillStyle = "rgba(166,173,186,0.75)";
+  ctx.fillText("%", groupX + scoreW + 8 * S, y + 70 * S);
   y += 90 * S;
 
   // Score label
@@ -153,7 +152,7 @@ async function renderCard(result: AnalysisResult): Promise<string> {
     let bx = PAD;
     ctx.font = `500 ${15 * S}px ${font}`;
     for (const cat of cats) {
-      const label = categoryLabels[cat] ?? cat;
+      const label = CATEGORY_LABELS[cat] ?? cat;
       const tw = ctx.measureText(label).width;
       const bw = tw + 28 * S;
       const bh = 34 * S;
