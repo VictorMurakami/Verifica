@@ -21,7 +21,8 @@
   "vars": {
     "ORIGIN_URL": "http://backend:8000",
     "ALLOWED_ORIGIN": "https://verifica.kaorabr.com",
-    "TURNSTILE_HOSTNAME": "verifica.kaorabr.com"
+    "TURNSTILE_HOSTNAME": "verifica.kaorabr.com",
+    "BLOCKED_ZONES": "kaorabr.com,wegobr.com"
   },
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }
