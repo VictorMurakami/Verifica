@@ -10,7 +10,7 @@ export default function PrivacyPage() {
     <main className="flex-1 w-full max-w-[34rem] mx-auto px-4 py-8 sm:py-12 space-y-8">
       <header className="space-y-1">
         <h1 className="text-[1.75rem] leading-9 font-bold">Política de Privacidade</h1>
-        <p className="text-xs text-base-content/70">Atualizada em 15 de outubro de 2026.</p>
+        <p className="text-xs text-base-content/70">Atualizada em 16 de outubro de 2026.</p>
       </header>
 
       <p className={BODY}>
@@ -38,7 +38,7 @@ export default function PrivacyPage() {
         <ul className={`${BODY} list-disc pl-5 space-y-3`}>
           <li>
             <strong className="font-semibold">OpenRouter e o provedor do modelo de IA:</strong> o texto enviado, ou o conteúdo da página do link,
-            é processado por um modelo de IA acessado pelo OpenRouter. No plano gratuito, o provedor do modelo pode
+            passa por um modelo de IA acessado através do OpenRouter. No plano gratuito, o provedor do modelo pode
             registrar o conteúdo. Por isso, <strong className="font-semibold">não cole dados pessoais</strong>, seus ou de outras pessoas.
           </li>
           <li>
