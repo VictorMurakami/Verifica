@@ -1,27 +1,44 @@
-import traceback
+from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+import logging
+import time
 
-from app.services.verifier import verificar
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.errors import AppError
+from app.core.gateway import client_ip, fingerprint_ip
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class AnalyzeRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    content: str
+    id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
+
+
 @router.post("/api/analyze")
-def analyze(data: dict):
-    content = data.get("content") or data.get("texto") or data.get("text")
-    url = data.get("url")
-    request_id = data.get("id") or data.get("requestId")
-
+def analyze(body: AnalyzeRequest, request: Request, ip: str = Depends(client_ip)) -> dict:
+    fingerprint = fingerprint_ip(ip, request.app.state.settings.ip_hash_key)
+    started = time.monotonic()
     try:
-        return verificar(content=content, url=url, request_id=request_id)
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+        outcome = request.app.state.verifier.analyze(body.content, body.id, fingerprint)
+    except AppError as exc:
+        _log(body.id, fingerprint, "erro", exc.status_code, started)
+        raise
     except Exception:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=502,
-            detail="Algo deu errado na análise. Tente novamente em instantes.",
-        )
+        _log(body.id, fingerprint, "erro", 500, started)
+        raise
+    _log(body.id, fingerprint, "cache" if outcome.from_cache else "ok", 200, started)
+    return outcome.payload
+
+
+def _log(request_id: str | None, fingerprint: str, outcome: str, status: int, started: float) -> None:
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    logger.info(
+        "analyze id=%s ip=%s outcome=%s status=%d ms=%d",
+        request_id or "-", fingerprint[:8], outcome, status, elapsed_ms,
+    )
