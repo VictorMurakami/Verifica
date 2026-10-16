@@ -158,7 +158,12 @@ def build_verifier(settings: Settings) -> Verifier:
         cache=ResultCache(db, ttl_seconds=settings.cache_ttl_hours * 3600),
         quota=QuotaStore(db, per_ip_daily=settings.quota_per_ip_daily, global_daily=settings.quota_global_daily),
         throttle=Throttle(max_concurrency=settings.llm_max_concurrency, per_minute=settings.llm_per_minute),
-        llm=LlmClient(api_key=settings.openrouter_api_key, model=settings.model_name),
+        llm=LlmClient(
+            api_key=settings.openrouter_api_key,
+            model=settings.model_name,
+            max_prompt_price=settings.llm_max_prompt_price,
+            max_completion_price=settings.llm_max_completion_price,
+        ),
         fetch_page=_fetch_page_disabled_in_production if settings.is_production else extract_text_from_url,
         extract_page=extract_text,
     )

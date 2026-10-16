@@ -4,12 +4,14 @@ import json
 import logging
 import math
 import re
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
+from typing import Callable
 
 import requests
 
 from app.core import messages
-from app.core.errors import BusyError, InputError, UpstreamError, UpstreamTimeout
+from app.core.errors import BusyError, InputError, QuotaExceeded, UpstreamError, UpstreamTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,8 @@ APP_TITLE = "Verifica"
 TIMEOUT = (5, 45)
 BUSY_STATUSES = frozenset({402, 429, 503})
 BUSY_RETRY_AFTER = 60
+KEY_LIMIT_PHRASE = "key limit"
+PROVIDER_LOG_MAX_LENGTH = 64
 
 CATEGORIAS = [
     "linguagem_alarmista",
@@ -135,11 +139,33 @@ def _new_session() -> requests.Session:
     return session
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _seconds_until_utc_midnight(now: datetime) -> int:
+    now = now.astimezone(timezone.utc)
+    tomorrow = datetime.combine(now.date(), time.min, tzinfo=timezone.utc) + timedelta(days=1)
+    return max(1, math.ceil((tomorrow - now).total_seconds()))
+
+
 class LlmClient:
-    def __init__(self, *, api_key: str, model: str, session: requests.Session | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        max_prompt_price: float,
+        max_completion_price: float,
+        session: requests.Session | None = None,
+        now: Callable[[], datetime] = _utc_now,
+    ) -> None:
         self._api_key = api_key
         self._model = model
+        self._max_prompt_price = max_prompt_price
+        self._max_completion_price = max_completion_price
         self._session = session or _new_session()
+        self._now = now
 
     def analyze(self, *, texto: str, contexto: str) -> dict:
         body = {
@@ -149,6 +175,7 @@ class LlmClient:
                 {"role": "user", "content": build_user_prompt(texto, contexto)},
             ],
             **GENERATION,
+            "provider": {"max_price": {"prompt": self._max_prompt_price, "completion": self._max_completion_price}},
         }
         try:
             response = self._session.post(OPENROUTER_URL, headers=self._headers(), json=body, timeout=TIMEOUT)
@@ -159,7 +186,8 @@ class LlmClient:
             raise UpstreamError(messages.LLM_UNAVAILABLE) from None
 
         payload = _json_body(response)
-        _raise_for_error(response.status_code, payload.get("error"))
+        _raise_for_error(response.status_code, payload.get("error"), now=self._now)
+        _log_usage(payload)
         content, finish_reason = _first_choice(payload)
         return _parse_result(content, finish_reason)
 
@@ -184,15 +212,53 @@ def _json_body(response: requests.Response) -> dict:
     raise UpstreamError(messages.LLM_UNAVAILABLE)
 
 
-def _raise_for_error(status: int, error: object) -> None:
+def _raise_for_error(
+    status: int,
+    error: object,
+    *,
+    now: Callable[[], datetime] = _utc_now,
+) -> None:
     code = error.get("code") if isinstance(error, dict) else None
     provider_message = str(error.get("message", ""))[:200] if isinstance(error, dict) else None
     if status in BUSY_STATUSES or code in BUSY_STATUSES:
         logger.warning("openrouter limitando: status=%s code=%s message=%r", status, code, provider_message)
         raise BusyError(messages.BUSY, retry_after=BUSY_RETRY_AFTER)
+    if status == 403 and provider_message and KEY_LIMIT_PHRASE in provider_message.lower():
+        logger.warning("openrouter limite da chave excedido: status=%s message=%r", status, provider_message)
+        raise QuotaExceeded(messages.GLOBAL_QUOTA, retry_after=_seconds_until_utc_midnight(now()))
     if status >= 400 or error is not None:
         logger.warning("openrouter erro: status=%s code=%s message=%r", status, code, provider_message)
         raise UpstreamError(messages.LLM_UNAVAILABLE)
+
+
+def _sanitize_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _sanitize_cost(value: object) -> float | int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        return value if math.isfinite(value) else None
+    except OverflowError:
+        return None
+
+
+def _log_usage(payload: dict) -> None:
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        usage = {}
+    provider = payload.get("provider")
+    provider_value = str(provider)[:PROVIDER_LOG_MAX_LENGTH] if provider is not None else None
+    logger.info(
+        "openrouter análise concluída: provider=%r prompt_tokens=%s completion_tokens=%s cost=%s",
+        provider_value,
+        _sanitize_int(usage.get("prompt_tokens")),
+        _sanitize_int(usage.get("completion_tokens")),
+        _sanitize_cost(usage.get("cost")),
+    )
 
 
 def _first_choice(payload: dict) -> tuple[str, str | None]:

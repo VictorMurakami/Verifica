@@ -1,12 +1,21 @@
+from datetime import datetime, timezone
+
 import pytest
 import requests
 
 from app.core import messages
-from app.core.errors import BusyError, InputError, UpstreamError, UpstreamTimeout
-from app.services.llm import OPENROUTER_URL, LlmClient, build_user_prompt, detect_injection
+from app.core.errors import BusyError, InputError, QuotaExceeded, UpstreamError, UpstreamTimeout
+from app.services.llm import GENERATION, OPENROUTER_URL, LlmClient, build_user_prompt, detect_injection
 
 GOOD = '{"score": 80, "verdict": "Confiável: fontes citadas", "excerpts": []}'
 MODEL = "google/gemma-4-26b-a4b-it:free"
+MAX_PROMPT_PRICE = 0.11
+MAX_COMPLETION_PRICE = 0.44
+FIXED_NOW = datetime(2026, 10, 16, 23, 59, 0, tzinfo=timezone.utc)
+
+
+def fixed_now() -> datetime:
+    return FIXED_NOW
 
 
 class FakeResponse:
@@ -36,9 +45,20 @@ def ok(content, finish="stop"):
     return FakeResponse(200, {"choices": [{"message": {"content": content}, "finish_reason": finish}]})
 
 
-def client_with(result):
+def client_with(result, now=None):
     session = FakeSession(result)
-    return LlmClient(api_key="sk-or-test-key", model=MODEL, session=session), session
+    extra = {"now": now} if now is not None else {}
+    return (
+        LlmClient(
+            api_key="sk-or-test-key",
+            model=MODEL,
+            max_prompt_price=MAX_PROMPT_PRICE,
+            max_completion_price=MAX_COMPLETION_PRICE,
+            session=session,
+            **extra,
+        ),
+        session,
+    )
 
 
 def test_request_shape_and_result():
@@ -60,6 +80,12 @@ def test_request_shape_and_result():
     assert body["messages"][1]["role"] == "user"
     assert "<CONTEUDO_PARA_ANALISE>" in body["messages"][1]["content"]
     assert "Uma notícia" in body["messages"][1]["content"]
+    assert body["provider"] == {"max_price": {"prompt": MAX_PROMPT_PRICE, "completion": MAX_COMPLETION_PRICE}}
+    assert list(body.keys())[-1] == "provider"
+
+
+def test_generation_constant_has_no_provider_key():
+    assert "provider" not in GENERATION
 
 
 @pytest.mark.parametrize("status", [402, 429, 503])
@@ -84,6 +110,43 @@ def test_error_object_in_200_body_is_mapped():
 
 def test_error_inside_choice_is_mapped():
     client, _ = client_with(FakeResponse(200, {"choices": [{"error": {"code": 500, "message": "x"}}]}))
+    with pytest.raises(UpstreamError) as exc:
+        client.analyze(texto="t", contexto="")
+    assert exc.value.message == messages.LLM_UNAVAILABLE
+
+
+def test_no_endpoint_under_max_price_becomes_upstream_error(caplog):
+    caplog.set_level("WARNING")
+    client, _ = client_with(
+        FakeResponse(404, {"error": {"message": "No endpoints found that satisfy the max price for this request"}})
+    )
+    with pytest.raises(UpstreamError) as exc:
+        client.analyze(texto="t", contexto="")
+    assert exc.value.message == messages.LLM_UNAVAILABLE
+    assert any("openrouter erro" in r.getMessage() for r in caplog.records)
+
+
+def test_key_limit_exceeded_becomes_quota_exceeded(caplog):
+    caplog.set_level("WARNING")
+    client, _ = client_with(FakeResponse(403, {"error": {"message": "Key limit exceeded"}}), now=fixed_now)
+    with pytest.raises(QuotaExceeded) as exc:
+        client.analyze(texto="texto sigiloso", contexto="")
+    assert exc.value.message == messages.GLOBAL_QUOTA
+    assert exc.value.retry_after == 60
+    assert caplog.records
+    for record in caplog.records:
+        assert "texto sigiloso" not in record.getMessage()
+        assert "sk-or-test-key" not in record.getMessage()
+
+
+def test_key_limit_exceeded_is_case_insensitive():
+    client, _ = client_with(FakeResponse(403, {"error": {"message": "KEY LIMIT EXCEEDED"}}), now=fixed_now)
+    with pytest.raises(QuotaExceeded):
+        client.analyze(texto="t", contexto="")
+
+
+def test_other_403_becomes_upstream_error():
+    client, _ = client_with(FakeResponse(403, {"error": {"message": "Content flagged by moderation"}}))
     with pytest.raises(UpstreamError) as exc:
         client.analyze(texto="t", contexto="")
     assert exc.value.message == messages.LLM_UNAVAILABLE
@@ -264,3 +327,120 @@ def test_finite_scores_remain_valid(score):
     client, _ = client_with(ok('{"score": ' + score + ', "verdict": "ok"}'))
     result = client.analyze(texto="t", contexto="")
     assert "score" in result
+
+
+def test_usage_is_logged_even_when_content_is_truncated(caplog):
+    caplog.set_level("INFO")
+    payload = {
+        "choices": [{"message": {"content": '{"score": 8'}, "finish_reason": "length"}],
+        "provider": "OpenRouter-Google",
+        "usage": {"prompt_tokens": 500, "completion_tokens": 900, "cost": 0.0005},
+    }
+    client, _ = client_with(FakeResponse(200, payload))
+    with pytest.raises(InputError) as exc:
+        client.analyze(texto="t", contexto="")
+    assert exc.value.message == messages.LLM_TOO_LONG
+    [record] = [r for r in caplog.records if r.levelname == "INFO"]
+    message = record.getMessage()
+    assert "500" in message
+    assert "900" in message
+    assert "0.0005" in message
+
+
+def test_success_logs_provider_tokens_and_cost(caplog):
+    caplog.set_level("INFO")
+    payload = {
+        "choices": [{"message": {"content": GOOD}, "finish_reason": "stop"}],
+        "provider": "OpenRouter-Google",
+        "usage": {"prompt_tokens": 120, "completion_tokens": 40, "cost": 0.00016},
+    }
+    client, _ = client_with(FakeResponse(200, payload))
+    client.analyze(texto="texto super secreto", contexto="")
+    [record] = [r for r in caplog.records if r.levelname == "INFO"]
+    message = record.getMessage()
+    assert "OpenRouter-Google" in message
+    assert "120" in message
+    assert "40" in message
+    assert "0.00016" in message
+    assert "texto super secreto" not in message
+    assert "sk-or-test-key" not in message
+
+
+def test_success_without_usage_does_not_break(caplog):
+    caplog.set_level("INFO")
+    payload = {
+        "choices": [{"message": {"content": GOOD}, "finish_reason": "stop"}],
+        "provider": "OpenRouter-Google",
+    }
+    client, _ = client_with(FakeResponse(200, payload))
+    result = client.analyze(texto="t", contexto="")
+    assert result["score"] == 80
+    [record] = [r for r in caplog.records if r.levelname == "INFO"]
+    message = record.getMessage()
+    assert "prompt_tokens=None" in message
+    assert "completion_tokens=None" in message
+    assert "cost=None" in message
+
+
+def test_success_with_malformed_usage_does_not_break(caplog):
+    caplog.set_level("INFO")
+    payload = {
+        "choices": [{"message": {"content": GOOD}, "finish_reason": "stop"}],
+        "provider": "OpenRouter-Google",
+        "usage": "not-a-dict",
+    }
+    client, _ = client_with(FakeResponse(200, payload))
+    result = client.analyze(texto="t", contexto="")
+    assert result["score"] == 80
+    [record] = [r for r in caplog.records if r.levelname == "INFO"]
+    message = record.getMessage()
+    assert "prompt_tokens=None" in message
+    assert "completion_tokens=None" in message
+    assert "cost=None" in message
+
+
+def test_provider_with_newline_is_escaped_in_log(caplog):
+    caplog.set_level("INFO")
+    payload = {
+        "choices": [{"message": {"content": GOOD}, "finish_reason": "stop"}],
+        "provider": "OpenRouter\nInjected-Line",
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "cost": 0.01},
+    }
+    client, _ = client_with(FakeResponse(200, payload))
+    client.analyze(texto="t", contexto="")
+    [record] = [r for r in caplog.records if r.levelname == "INFO"]
+    message = record.getMessage()
+    assert "\\n" in message
+    assert "\nInjected-Line" not in message
+
+
+def test_long_provider_is_truncated_in_log(caplog):
+    caplog.set_level("INFO")
+    payload = {
+        "choices": [{"message": {"content": GOOD}, "finish_reason": "stop"}],
+        "provider": "x" * 500,
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "cost": 0.01},
+    }
+    client, _ = client_with(FakeResponse(200, payload))
+    client.analyze(texto="t", contexto="")
+    [record] = [r for r in caplog.records if r.levelname == "INFO"]
+    message = record.getMessage()
+    assert "x" * 500 not in message
+    assert "x" * 64 in message
+
+
+@pytest.mark.parametrize("bad_usage", [{"prompt_tokens": "120", "completion_tokens": True, "cost": "0.01"}])
+def test_non_numeric_usage_fields_become_none(caplog, bad_usage):
+    caplog.set_level("INFO")
+    payload = {
+        "choices": [{"message": {"content": GOOD}, "finish_reason": "stop"}],
+        "provider": "OpenRouter-Google",
+        "usage": bad_usage,
+    }
+    client, _ = client_with(FakeResponse(200, payload))
+    client.analyze(texto="t", contexto="")
+    [record] = [r for r in caplog.records if r.levelname == "INFO"]
+    message = record.getMessage()
+    assert "prompt_tokens=None" in message
+    assert "completion_tokens=None" in message
+    assert "cost=None" in message

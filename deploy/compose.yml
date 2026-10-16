@@ -16,13 +16,15 @@ services:
       ENV: production
       DATA_DIR: /app/data
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY ausente em deploy/.env}
-      MODEL_NAME: ${MODEL_NAME:-google/gemma-4-26b-a4b-it:free}
+      MODEL_NAME: ${MODEL_NAME:-google/gemma-4-26b-a4b-it}
       GATEWAY_KEY: ${GATEWAY_KEY:?GATEWAY_KEY ausente em deploy/.env}
       IP_HASH_KEY: ${IP_HASH_KEY:?IP_HASH_KEY ausente em deploy/.env}
       QUOTA_GLOBAL_DAILY: ${QUOTA_GLOBAL_DAILY:-200}
       QUOTA_PER_IP_DAILY: ${QUOTA_PER_IP_DAILY:-10}
       LLM_PER_MINUTE: ${LLM_PER_MINUTE:-15}
       LLM_MAX_CONCURRENCY: ${LLM_MAX_CONCURRENCY:-2}
+      LLM_MAX_PROMPT_PRICE: ${LLM_MAX_PROMPT_PRICE:-0.15}
+      LLM_MAX_COMPLETION_PRICE: ${LLM_MAX_COMPLETION_PRICE:-0.60}
       CACHE_TTL_HOURS: ${CACHE_TTL_HOURS:-24}
     user: "10001:10001"
     read_only: true

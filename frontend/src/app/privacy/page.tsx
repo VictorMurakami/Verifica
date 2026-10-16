@@ -38,8 +38,8 @@ export default function PrivacyPage() {
         <ul className={`${BODY} list-disc pl-5 space-y-3`}>
           <li>
             <strong className="font-semibold">OpenRouter e o provedor do modelo de IA:</strong> o texto enviado, ou o conteúdo da página do link,
-            passa por um modelo de IA acessado através do OpenRouter. No plano gratuito, o provedor do modelo pode
-            registrar o conteúdo. Por isso, <strong className="font-semibold">não cole dados pessoais</strong>, seus ou de outras pessoas.
+            passa por um modelo de IA acessado através do OpenRouter. O provedor do modelo pode registrar o
+            conteúdo. Por isso, <strong className="font-semibold">não cole dados pessoais</strong>, seus ou de outras pessoas.
           </li>
           <li>
             <strong className="font-semibold">Cloudflare:</strong> hospeda o site e usa o Turnstile para diferenciar pessoas de robôs sem pedir

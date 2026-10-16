@@ -1,6 +1,6 @@
 # Verifica
 
-Verificador de indícios de desinformação com IA. Backend em **FastAPI** (Gemma 4 via OpenRouter, tier gratuito) e frontend em **Next.js 16** exportado como site estático, servido por um **Cloudflare Worker** em `verifica.kaorabr.com`.
+Verificador de indícios de desinformação com IA. Backend em **FastAPI** (Gemma 4 via OpenRouter, pago, com teto de preço por requisição) e frontend em **Next.js 16** exportado como site estático, servido por um **Cloudflare Worker** em `verifica.kaorabr.com`.
 
 ```
 navegador ─► Cloudflare Worker (assets + /api: Turnstile, rate limit)
@@ -53,7 +53,7 @@ cd frontend && npm run lint && npm run typecheck
 | Backend | gateway key, schema, SSRF guard, cache 24 h, 2 chamadas simultâneas, 15/min, 10/dia por IP, 200/dia no total |
 | Servidor | saída só para a Cloudflare (allowlist); LAN, host e IP público bloqueados; download de páginas no Worker |
 
-O backend não sobe com modelo que não termine em `:free` nem com segredos de exemplo (`troque-…`).
+O backend não sobe com modelo fora da allowlist, com teto de preço fora de 0,01–1 USD por milhão de tokens, nem com segredos de exemplo (`troque-…`).
 
 ## Dependências do backend
 
@@ -126,4 +126,5 @@ npx wrangler secret put TURNSTILE_SECRET   # e GATEWAY_KEY
 
 - Workers VPC está em beta. Se mudar ou passar a custar: hostname público + Access, sem o binding `ORIGIN`, com `ORIGIN_URL` público e os secrets `ACCESS_CLIENT_ID`/`ACCESS_CLIENT_SECRET` (o Worker já suporta).
 - Consumo do OpenRouter: `GET https://openrouter.ai/api/v1/key`.
-- Trocar de modelo: `MODEL_NAME` com outro modelo `:free` em `deploy/.env` + `deploy.sh`.
+- Trocar de modelo: editar `ALLOWED_MODELS` em `backend/app/core/config.py` (código, não só `.env`), ajustar `MODEL_NAME` em `deploy/.env` e revisar o teto de preço (`LLM_MAX_PROMPT_PRICE`/`LLM_MAX_COMPLETION_PRICE`) antes do `deploy.sh`.
+- A chave `verifica` no OpenRouter tem limite de crédito de US$0,05 com reset diário (meia-noite UTC); se estourar, o site mostra que o limite de análises de hoje foi atingido até o reset.

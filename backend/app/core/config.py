@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,12 +8,16 @@ from typing import Mapping
 
 from dotenv import load_dotenv
 
-FREE_MODEL_SUFFIX = ":free"
-DEFAULT_MODEL = "google/gemma-4-26b-a4b-it:free"
+DEFAULT_MODEL = "google/gemma-4-26b-a4b-it"
+ALLOWED_MODELS = frozenset({"google/gemma-4-26b-a4b-it", "google/gemma-4-26b-a4b-it:free"})
 MIN_SECRET_LENGTH = 32
 PLACEHOLDER_PREFIX = "troque-"
 DEV_IP_HASH_KEY = "development-only-ip-hash-key"
 ENVIRONMENTS = ("development", "production")
+MIN_PRICE_PER_MILLION = 0.01
+MAX_PRICE_PER_MILLION = 1.0
+DEFAULT_MAX_PROMPT_PRICE = 0.15
+DEFAULT_MAX_COMPLETION_PRICE = 0.60
 
 
 class ConfigError(RuntimeError):
@@ -30,6 +35,8 @@ class Settings:
     quota_per_ip_daily: int
     llm_per_minute: int
     llm_max_concurrency: int
+    llm_max_prompt_price: float
+    llm_max_completion_price: float
     cache_ttl_hours: int
     data_dir: Path
 
@@ -62,6 +69,23 @@ def _positive_int(environ: Mapping[str, str], name: str, default: int) -> int:
     return value
 
 
+def _price(environ: Mapping[str, str], name: str, default: float) -> float:
+    raw = environ.get(name, str(default)).strip()
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{name} precisa ser um número, recebido {raw!r}") from exc
+    if not math.isfinite(value):
+        raise ConfigError(f"{name} precisa ser um número finito, recebido {raw!r}")
+    if value < MIN_PRICE_PER_MILLION:
+        raise ConfigError(
+            f"{name} precisa ser pelo menos {MIN_PRICE_PER_MILLION} USD por milhão de tokens, recebido {value}"
+        )
+    if value > MAX_PRICE_PER_MILLION:
+        raise ConfigError(f"{name} não pode passar de {MAX_PRICE_PER_MILLION} USD/milhão de tokens, recebido {value}")
+    return value
+
+
 def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     if environ is None:
         load_dotenv()
@@ -77,10 +101,8 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError("OPENROUTER_API_KEY ausente")
 
     model_name = environ.get("MODEL_NAME", DEFAULT_MODEL).strip()
-    if not model_name.endswith(FREE_MODEL_SUFFIX):
-        raise ConfigError(
-            f"MODEL_NAME precisa terminar em {FREE_MODEL_SUFFIX!r} para não gerar custo, recebido {model_name!r}"
-        )
+    if model_name not in ALLOWED_MODELS:
+        raise ConfigError(f"MODEL_NAME precisa ser um de {sorted(ALLOWED_MODELS)!r}, recebido {model_name!r}")
 
     return Settings(
         env=env,
@@ -92,6 +114,8 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
         quota_per_ip_daily=_positive_int(environ, "QUOTA_PER_IP_DAILY", 10),
         llm_per_minute=_positive_int(environ, "LLM_PER_MINUTE", 15),
         llm_max_concurrency=_positive_int(environ, "LLM_MAX_CONCURRENCY", 2),
+        llm_max_prompt_price=_price(environ, "LLM_MAX_PROMPT_PRICE", DEFAULT_MAX_PROMPT_PRICE),
+        llm_max_completion_price=_price(environ, "LLM_MAX_COMPLETION_PRICE", DEFAULT_MAX_COMPLETION_PRICE),
         cache_ttl_hours=_positive_int(environ, "CACHE_TTL_HOURS", 24),
         data_dir=Path(environ.get("DATA_DIR", "data")),
     )

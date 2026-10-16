@@ -2,7 +2,7 @@ import pytest
 
 from app.core.config import ConfigError, load_settings
 
-BASE = {"OPENROUTER_API_KEY": "sk-or-test-key", "MODEL_NAME": "google/gemma-4-26b-a4b-it:free"}
+BASE = {"OPENROUTER_API_KEY": "sk-or-test-key", "MODEL_NAME": "google/gemma-4-26b-a4b-it"}
 PROD = {"ENV": "production", "GATEWAY_KEY": "g" * 43, "IP_HASH_KEY": "h" * 43}
 
 
@@ -26,9 +26,39 @@ def test_production_settings():
     assert settings.gateway_key == "g" * 43
 
 
-def test_paid_model_is_refused():
-    with pytest.raises(ConfigError, match=":free"):
-        load_settings({**BASE, "MODEL_NAME": "google/gemma-4-26b-a4b-it"})
+def test_paid_model_is_accepted():
+    settings = load_settings({**BASE, "ENV": "development", "MODEL_NAME": "google/gemma-4-26b-a4b-it"})
+    assert settings.model_name == "google/gemma-4-26b-a4b-it"
+
+
+def test_free_suffix_is_still_accepted():
+    settings = load_settings({**BASE, "ENV": "development", "MODEL_NAME": "google/gemma-4-26b-a4b-it:free"})
+    assert settings.model_name == "google/gemma-4-26b-a4b-it:free"
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "google/gemma-4-26b-a4b-it:online",
+        "google/gemma-4-26b-a4b-it:nitro",
+        "google/gemma-4-26b-a4b-it:floor",
+        "Google/Gemma-4-26b-A4b-It",
+        "google/gemma 4-26b-a4b-it",
+        "gemma-4-26b-a4b-it",
+        "openrouter/auto",
+        "perplexity/sonar",
+        "openai/gpt-5-nano",
+        "",
+    ],
+)
+def test_invalid_model_name_is_refused(model_name):
+    with pytest.raises(ConfigError, match="MODEL_NAME"):
+        load_settings({**BASE, "ENV": "development", "MODEL_NAME": model_name})
+
+
+def test_model_name_with_surrounding_whitespace_is_still_accepted():
+    settings = load_settings({**BASE, "ENV": "development", "MODEL_NAME": "  google/gemma-4-26b-a4b-it  "})
+    assert settings.model_name == "google/gemma-4-26b-a4b-it"
 
 
 def test_missing_api_key_is_refused():
@@ -70,3 +100,42 @@ def test_unknown_env_is_refused():
 def test_missing_env_defaults_to_production_and_requires_gateway_key():
     with pytest.raises(ConfigError, match="GATEWAY_KEY"):
         load_settings(BASE)
+
+
+def test_price_defaults(tmp_path):
+    settings = load_settings({**BASE, "ENV": "development", "DATA_DIR": str(tmp_path)})
+    assert settings.llm_max_prompt_price == 0.15
+    assert settings.llm_max_completion_price == 0.60
+
+
+def test_price_values_are_read():
+    settings = load_settings(
+        {**BASE, "ENV": "development", "LLM_MAX_PROMPT_PRICE": "0.11", "LLM_MAX_COMPLETION_PRICE": "0.44"}
+    )
+    assert settings.llm_max_prompt_price == 0.11
+    assert settings.llm_max_completion_price == 0.44
+
+
+@pytest.mark.parametrize("name", ["LLM_MAX_PROMPT_PRICE", "LLM_MAX_COMPLETION_PRICE"])
+@pytest.mark.parametrize("value", ["abc", "0", "-1", "nan", "inf", "1.01", "0.009", "1e-9", "0.00000015"])
+def test_invalid_price_is_refused(name, value):
+    with pytest.raises(ConfigError, match=name):
+        load_settings({**BASE, "ENV": "development", name: value})
+
+
+@pytest.mark.parametrize("name", ["LLM_MAX_PROMPT_PRICE", "LLM_MAX_COMPLETION_PRICE"])
+def test_max_price_boundary_is_accepted(name):
+    settings = load_settings({**BASE, "ENV": "development", name: "1.0"})
+    assert getattr(settings, name.lower()) == 1.0
+
+
+@pytest.mark.parametrize("name", ["LLM_MAX_PROMPT_PRICE", "LLM_MAX_COMPLETION_PRICE"])
+def test_min_price_boundary_is_accepted(name):
+    settings = load_settings({**BASE, "ENV": "development", name: "0.01"})
+    assert getattr(settings, name.lower()) == 0.01
+
+
+@pytest.mark.parametrize("name", ["LLM_MAX_PROMPT_PRICE", "LLM_MAX_COMPLETION_PRICE"])
+def test_below_min_price_message_cites_unit(name):
+    with pytest.raises(ConfigError, match="USD por milhão de tokens"):
+        load_settings({**BASE, "ENV": "development", name: "0.009"})
