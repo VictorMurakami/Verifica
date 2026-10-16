@@ -344,6 +344,10 @@ describe("validateTarget", () => {
     );
   });
 
+  it("accepts an internationalized top-level domain", () => {
+    expect(validateTarget(new URL("https://noticias.рф/materia"), TURNSTILE_HOSTNAME, BLOCKED_ZONES)).toBe(true);
+  });
+
   it.each([
     ["an IPv4 literal", "http://192.168.0.1/"],
     ["an IPv6 literal", "http://[::1]/"],

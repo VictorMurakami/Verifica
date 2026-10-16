@@ -36,7 +36,7 @@ const PAGE_USER_AGENT =
 const PAGE_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 const PAGE_ACCEPT_LANGUAGE = "pt-BR,pt;q=0.9,en;q=0.8";
 const BLOCKED_HOSTNAME_SUFFIXES = [".local", ".localhost", ".internal", ".lan", ".home.arpa"];
-const LAST_LABEL_PATTERN = /^[a-z]+$/;
+const LAST_LABEL_PATTERN = /^(?:[a-z]+|xn--[a-z0-9-]+)$/;
 const MAX_URL_LENGTH = 2048;
 const CHARSET_ALLOWLIST = new Set([
   "utf-8",
