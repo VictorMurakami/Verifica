@@ -1,37 +1,22 @@
 from __future__ import annotations
 
 import logging
+from typing import Callable
 
-import requests
 import trafilatura
 from bs4 import BeautifulSoup
 
+from app.core import messages
+from app.core.errors import InputError
+from app.services.safe_fetch import FetchedPage, fetch_html
+
 logger = logging.getLogger(__name__)
-
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;q=0.9,"
-        "image/avif,image/webp,*/*;q=0.8"
-    ),
-    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-}
 
 MAX_CHARS = 15000
 MIN_USABLE_CHARS = 80
 
-GENERIC_FAIL = (
-    "Não conseguimos ler o conteúdo desta página. "
-    "Tente colar o texto da notícia diretamente."
-)
 
-
-def _extract_with_trafilatura(html: str, url: str) -> str:
+def _extract_with_trafilatura(html: str | bytes, url: str) -> str:
     try:
         text = trafilatura.extract(
             html,
@@ -51,7 +36,7 @@ def _extract_with_trafilatura(html: str, url: str) -> str:
         return ""
 
 
-def _extract_with_bs4(html: str) -> str:
+def _extract_with_bs4(html: str | bytes) -> str:
     try:
         soup = BeautifulSoup(html, "html.parser")
     except Exception as e:
@@ -84,62 +69,35 @@ def _extract_with_bs4(html: str) -> str:
     return ""
 
 
-def extract_text_from_url(url: str) -> tuple[str, str | None]:
-    """Baixa o HTML da URL e devolve (texto, erro_amigavel).
+def _markup(page: FetchedPage) -> str | bytes:
+    # Sem charset no header, bytes deixam trafilatura/bs4 lerem o <meta charset>.
+    if page.charset:
+        try:
+            return page.content.decode(page.charset, errors="replace")
+        except LookupError:
+            pass
+    return page.content
 
-    - Sucesso → (texto, None).
-    - Falha → ("", mensagem amigável para o usuário).
-    """
 
-    try:
-        response = requests.get(url, timeout=10, headers=HEADERS, allow_redirects=True)
-    except requests.exceptions.Timeout:
-        return "", "A página demorou demais para responder. Tente novamente."
-    except requests.exceptions.SSLError:
-        return "", "Esta página tem um problema de segurança e não pôde ser aberta."
-    except requests.exceptions.ConnectionError:
-        return "", "Não conseguimos nos conectar a este link. Verifique se o endereço está correto."
-    except requests.exceptions.RequestException as e:
-        logger.debug("erro de rede: %s", e)
-        return "", "Não conseguimos acessar este link agora."
+def extract_text_from_url(url: str, fetch: Callable[[str], FetchedPage] = fetch_html) -> str:
+    page = fetch(url)
+    markup = _markup(page)
 
-    status = response.status_code
-    if status >= 400:
-        if status in (401, 403):
-            return "", (
-                "Esta página bloqueou nosso acesso. "
-                "Cole o texto da notícia diretamente para analisar."
-            )
-        if status == 404:
-            return "", "A página não foi encontrada. Verifique o link."
-        if status == 429:
-            return "", "O site está limitando acessos no momento. Tente novamente em instantes."
-        if 500 <= status < 600:
-            return "", "O site da notícia está fora do ar agora. Tente mais tarde."
-        return "", "Esta página não pôde ser aberta no momento."
+    trafi = _extract_with_trafilatura(markup, page.url)
+    bs4 = _extract_with_bs4(markup)
 
-    html = response.text or ""
-    if not html.strip():
-        return "", GENERIC_FAIL
-
-    trafi = _extract_with_trafilatura(html, url)
-    bs4 = _extract_with_bs4(html)
-
-    # Prefere trafilatura por padrão (mais limpo), mas se o bs4 trouxer
-    # bem mais conteúdo, é sinal de que trafilatura perdeu corpo da notícia.
+    # Prefere trafilatura (mais limpo); bs4 bem maior indica corpo perdido.
     if len(bs4) > len(trafi) * 1.3:
-        text = bs4
-        chosen = "bs4"
+        text, chosen = bs4, "bs4"
     else:
-        text = trafi or bs4
-        chosen = "trafilatura" if trafi else "bs4"
+        text, chosen = (trafi, "trafilatura") if trafi else (bs4, "bs4")
 
     logger.info(
-        "extração %s para %s (html=%d, trafi=%d, bs4=%d, final=%d)",
-        chosen, url, len(html), len(trafi), len(bs4), len(text),
+        "extração %s (bytes=%d, trafi=%d, bs4=%d, final=%d)",
+        chosen, len(page.content), len(trafi), len(bs4), len(text),
     )
 
     if len(text) < MIN_USABLE_CHARS:
-        return "", GENERIC_FAIL
+        raise InputError(messages.PAGE_UNREADABLE)
 
-    return text[:MAX_CHARS], None
+    return text[:MAX_CHARS]
