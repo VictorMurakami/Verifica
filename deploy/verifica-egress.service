@@ -1,0 +1,13 @@
+[Unit]
+Description=Verifica: bloqueia o container de alcancar a LAN e o host
+After=ufw.service
+Before=docker.service
+PartOf=docker.service ufw.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/verifica-egress-guard
+
+[Install]
+WantedBy=multi-user.target

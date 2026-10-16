@@ -2,17 +2,20 @@
 
 import { motion } from "framer-motion";
 import { ShieldAlert, ShieldQuestion, ShieldCheck } from "lucide-react";
+import { SCORE_LABELS, scoreBand } from "@/lib/score";
 
 interface Props {
   score: number;
 }
 
 function getScoreConfig(score: number) {
-  if (score <= 30)
-    return { color: "text-error", stroke: "stroke-error", bg: "bg-error/10", badge: "badge-error", label: "Muito Suspeito", Icon: ShieldAlert };
-  if (score <= 60)
-    return { color: "text-warning", stroke: "stroke-warning", bg: "bg-warning/10", badge: "badge-warning", label: "Atenção Recomendada", Icon: ShieldQuestion };
-  return { color: "text-success", stroke: "stroke-success", bg: "bg-success/10", badge: "badge-success", label: "Aparentemente Confiável", Icon: ShieldCheck };
+  const band = scoreBand(score);
+  const label = SCORE_LABELS[band];
+  if (band === "suspicious")
+    return { color: "text-error", stroke: "stroke-error", bg: "bg-error/10", badge: "badge-error", label, Icon: ShieldAlert };
+  if (band === "attention")
+    return { color: "text-warning", stroke: "stroke-warning", bg: "bg-warning/10", badge: "badge-warning", label, Icon: ShieldQuestion };
+  return { color: "text-success", stroke: "stroke-success", bg: "bg-success/10", badge: "badge-success", label, Icon: ShieldCheck };
 }
 
 export default function ScoreGauge({ score }: Props) {

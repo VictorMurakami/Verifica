@@ -1,0 +1,16 @@
+[Unit]
+Description=Verifica: sobe o compose de producao depois do firewall
+After=docker.service verifica-egress.service
+Requires=docker.service
+Wants=verifica-egress.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/bin/systemctl is-active --quiet verifica-egress.service
+ExecStartPre=/usr/bin/test ! -e /home/kami/.verifica-deploy-failed
+ExecStart=/usr/bin/docker compose -f /opt/verifica/deploy/compose.yml up -d --no-build
+ExecStop=/usr/bin/docker compose -f /opt/verifica/deploy/compose.yml stop
+
+[Install]
+WantedBy=multi-user.target

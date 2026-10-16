@@ -2,7 +2,7 @@ import { AnalysisResult } from "@/types/analysis";
 
 export const mockResult: AnalysisResult = {
   requestId: "mock-001",
-  reliabilityScore: 3,
+  reliabilityScore: 10,
   overallVerdict:
     "O conteúdo apresenta múltiplos sinais de desinformação, incluindo linguagem alarmista, ausência de fontes verificáveis e generalizações absolutas. Recomenda-se buscar fontes oficiais antes de compartilhar.",
   flaggedExcerpts: [

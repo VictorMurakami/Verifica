@@ -1,41 +1,45 @@
 from __future__ import annotations
 
+import codecs
 import logging
+import re
+from typing import Callable
 
-import requests
 import trafilatura
 from bs4 import BeautifulSoup
 
+from app.core import messages
+from app.core.errors import InputError
+from app.services.safe_fetch import FetchedPage, fetch_html
+
 logger = logging.getLogger(__name__)
-
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;q=0.9,"
-        "image/avif,image/webp,*/*;q=0.8"
-    ),
-    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-}
 
 MAX_CHARS = 15000
 MIN_USABLE_CHARS = 80
+MAX_TAGS = 40_000
+MAX_TAG_BYTES = 16_384
+_LONG_TAG_RE = re.compile(rb"<[^>]{16384,}")
 
-GENERIC_FAIL = (
-    "Não conseguimos ler o conteúdo desta página. "
-    "Tente colar o texto da notícia diretamente."
+# Charsets que sabemos decodificar sem ambiguidade; qualquer outro nome
+# (inclusive aliases exóticos como punycode/idna) cai no sniff de <meta charset>.
+_ALLOWED_CHARSETS = frozenset(
+    {"utf-8", "iso8859-1", "cp1252", "iso8859-15", "ascii", "utf-16-le", "utf-16-be"}
 )
 
 
-def _extract_with_trafilatura(html: str, url: str) -> str:
+def _normalize_charset(charset: str) -> str | None:
+    try:
+        name = codecs.lookup(charset).name
+    except LookupError:
+        return None
+    return name if name in _ALLOWED_CHARSETS else None
+
+
+def _extract_with_trafilatura(html: str | bytes) -> str:
     try:
         text = trafilatura.extract(
             html,
-            url=url,
+            url=None,
             include_comments=False,
             include_tables=False,
             include_formatting=False,
@@ -51,9 +55,9 @@ def _extract_with_trafilatura(html: str, url: str) -> str:
         return ""
 
 
-def _extract_with_bs4(html: str) -> str:
+def _extract_with_bs4(html: str | bytes) -> str:
     try:
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
     except Exception as e:
         logger.debug("bs4 parse falhou: %s", e)
         return ""
@@ -84,62 +88,45 @@ def _extract_with_bs4(html: str) -> str:
     return ""
 
 
-def extract_text_from_url(url: str) -> tuple[str, str | None]:
-    """Baixa o HTML da URL e devolve (texto, erro_amigavel).
+def _markup(page: FetchedPage) -> str | bytes:
+    # Sem charset reconhecido, bytes deixam trafilatura/bs4 lerem o <meta charset>.
+    if page.charset:
+        name = _normalize_charset(page.charset)
+        if name:
+            try:
+                return page.content.decode(name, errors="replace")
+            except (LookupError, UnicodeError):
+                pass
+    return page.content
 
-    - Sucesso → (texto, None).
-    - Falha → ("", mensagem amigável para o usuário).
-    """
 
-    try:
-        response = requests.get(url, timeout=10, headers=HEADERS, allow_redirects=True)
-    except requests.exceptions.Timeout:
-        return "", "A página demorou demais para responder. Tente novamente."
-    except requests.exceptions.SSLError:
-        return "", "Esta página tem um problema de segurança e não pôde ser aberta."
-    except requests.exceptions.ConnectionError:
-        return "", "Não conseguimos nos conectar a este link. Verifique se o endereço está correto."
-    except requests.exceptions.RequestException as e:
-        logger.debug("erro de rede: %s", e)
-        return "", "Não conseguimos acessar este link agora."
+def extract_text(page: FetchedPage) -> str:
+    tag_count = page.content.count(b"<")
+    if tag_count > MAX_TAGS or _LONG_TAG_RE.search(page.content):
+        logger.info("página recusada por complexidade (tags=%d)", tag_count)
+        raise InputError(messages.PAGE_TOO_LARGE)
 
-    status = response.status_code
-    if status >= 400:
-        if status in (401, 403):
-            return "", (
-                "Esta página bloqueou nosso acesso. "
-                "Cole o texto da notícia diretamente para analisar."
-            )
-        if status == 404:
-            return "", "A página não foi encontrada. Verifique o link."
-        if status == 429:
-            return "", "O site está limitando acessos no momento. Tente novamente em instantes."
-        if 500 <= status < 600:
-            return "", "O site da notícia está fora do ar agora. Tente mais tarde."
-        return "", "Esta página não pôde ser aberta no momento."
+    markup = _markup(page)
 
-    html = response.text or ""
-    if not html.strip():
-        return "", GENERIC_FAIL
+    trafi = _extract_with_trafilatura(markup)
+    bs4 = _extract_with_bs4(markup)
 
-    trafi = _extract_with_trafilatura(html, url)
-    bs4 = _extract_with_bs4(html)
-
-    # Prefere trafilatura por padrão (mais limpo), mas se o bs4 trouxer
-    # bem mais conteúdo, é sinal de que trafilatura perdeu corpo da notícia.
+    # Prefere trafilatura (mais limpo); bs4 bem maior indica corpo perdido.
     if len(bs4) > len(trafi) * 1.3:
-        text = bs4
-        chosen = "bs4"
+        text, chosen = bs4, "bs4"
     else:
-        text = trafi or bs4
-        chosen = "trafilatura" if trafi else "bs4"
+        text, chosen = (trafi, "trafilatura") if trafi else (bs4, "bs4")
 
     logger.info(
-        "extração %s para %s (html=%d, trafi=%d, bs4=%d, final=%d)",
-        chosen, url, len(html), len(trafi), len(bs4), len(text),
+        "extração %s (bytes=%d, trafi=%d, bs4=%d, final=%d)",
+        chosen, len(page.content), len(trafi), len(bs4), len(text),
     )
 
     if len(text) < MIN_USABLE_CHARS:
-        return "", GENERIC_FAIL
+        raise InputError(messages.PAGE_UNREADABLE)
 
-    return text[:MAX_CHARS], None
+    return text[:MAX_CHARS]
+
+
+def extract_text_from_url(url: str, fetch: Callable[[str], FetchedPage] = fetch_html) -> str:
+    return extract_text(fetch(url))
